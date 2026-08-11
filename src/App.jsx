@@ -9,79 +9,59 @@ import {
   Stepper,
   Toast,
 } from './components/ui'
+import ScanScreen from './screens/ScanScreen'
 import HotelWelcomeScreen from './screens/HotelWelcomeScreen'
 import DeviceVerificationScreen from './screens/DeviceVerificationScreen'
 import IdentityVerificationScreen from './screens/IdentityVerificationScreen'
-import FaceScanScreen from './screens/FaceScanScreen'
 import SecureDeviceScreen from './screens/SecureDeviceScreen'
 import SuccessScreen from './screens/SuccessScreen'
-import NewDeviceScreen from './screens/NewDeviceScreen'
+import { SESSION } from './data'
+import {
+  authenticate,
+  createIdentity,
+  detect,
+  forgetDevice,
+  registerCredential,
+  resetAll,
+} from './identity'
+import { verifyAssertion } from './passkey'
 
 /* ------------------------------------------------------------------ */
 /* Flow definitions — derived for step progress                       */
 /* ------------------------------------------------------------------ */
 
+// `bare` and `final` screens carry their own layout — no header, no stepper.
+const welcome = { key: 'hotelWelcome', label: 'Welcome', Screen: HotelWelcomeScreen, bare: true }
+const done = { key: 'done', label: 'Done', Screen: SuccessScreen, final: true, fullBleed: true }
+
 const FLOWS = {
-  returning: [
-    { key: 'hotelWelcome', label: 'Welcome', Screen: HotelWelcomeScreen },
-    { key: 'deviceVerify', label: 'Verify', Screen: DeviceVerificationScreen },
-    {
-      key: 'done',
-      label: 'Done',
-      Screen: SuccessScreen,
-      final: true,
-      fullBleed: true,
-    },
-  ],
+  returning: [welcome, { key: 'deviceVerify', label: 'Verify', Screen: DeviceVerificationScreen }, done],
   firstTime: [
-    { key: 'hotelWelcome', label: 'Welcome', Screen: HotelWelcomeScreen },
+    welcome,
     { key: 'identity', label: 'Identity', Screen: IdentityVerificationScreen },
-    { key: 'faceScan', label: 'Face Scan', Screen: FaceScanScreen },
     { key: 'secureDevice', label: 'Secure', Screen: SecureDeviceScreen },
-    {
-      key: 'done',
-      label: 'Done',
-      Screen: SuccessScreen,
-      final: true,
-      fullBleed: true,
-    },
+    done,
   ],
   newDevice: [
-    { key: 'hotelWelcome', label: 'Welcome', Screen: HotelWelcomeScreen },
-    { key: 'identity', label: 'Verify', Screen: IdentityVerificationScreen },
+    welcome,
+    { key: 'identity', label: 'Confirm', Screen: IdentityVerificationScreen },
     { key: 'secureDevice', label: 'Secure', Screen: SecureDeviceScreen },
-    {
-      key: 'done',
-      label: 'Done',
-      Screen: SuccessScreen,
-      final: true,
-      fullBleed: true,
-    },
+    done,
   ],
 }
 
 const HELP = {
-  hotelWelcome: 'Confirm hotel details match your booking. The system automatically detects your check-in state.',
-  deviceVerify: 'Verify identity using your phone’s Face ID or fingerprint.',
-  identity: 'Lay your government ID flat in good light inside the frame.',
-  faceScan: 'Look straight at the camera.',
-  secureDevice: 'Enable Face ID or fingerprint access.',
+  hotelWelcome: 'Confirm the hotel details match your booking. ChqIn works out the rest from your device.',
+  deviceVerify: 'Whatever unlocks your phone — Face ID, Touch ID or fingerprint — releases the passkey stored on this device. ChqIn only ever sees the signed proof.',
+  identity: 'Lay your government ID flat in good light inside the frame. This is a one-time step.',
+  secureDevice: 'Creates a passkey for this device, protected by your phone’s own unlock. The private key never leaves your phone.',
   done: 'Check-in is complete! Enjoy your stay at Hotel Aurora.',
 }
 
 export default function App() {
-  const [activeMode, setActiveMode] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search)
-      const modeParam = params.get('mode') || params.get('flow')
-      if (modeParam && ['returning', 'firstTime', 'newDevice'].includes(modeParam)) {
-        return modeParam
-      }
-    }
-    return 'returning'
-  })
-
-  const [flowStarted, setFlowStarted] = useState(false)
+  // 'scan' → the QR beat. 'flow' → the detected check-in journey.
+  const [phase, setPhase] = useState('scan')
+  const [detection, setDetection] = useState({ mode: 'firstTime', identity: null, credential: null })
   const [stepIndex, setStepIndex] = useState(0)
   const [helpOpen, setHelpOpen] = useState(false)
   const [exitOpen, setExitOpen] = useState(false)
@@ -96,38 +76,115 @@ export default function App() {
     toastTimer.current = setTimeout(() => setToast(null), 2600)
   }, [])
 
-  const currentFlowSteps = FLOWS[activeMode] || FLOWS.returning
-  const step = flowStarted ? currentFlowSteps[stepIndex] : currentFlowSteps[0]
+  const activeMode = detection.mode
+  const currentFlowSteps = FLOWS[activeMode]
+  const step = currentFlowSteps[stepIndex]
 
-  const reset = () => {
-    setFlowStarted(false)
+  /* -------------------------------------------------------------- */
+  /* Detection — the guest never chooses a journey                   */
+  /* -------------------------------------------------------------- */
+
+  const handleScanned = useCallback(() => {
+    setDetection(detect(SESSION))
+    setStepIndex(0)
+    setPhase('flow')
+  }, [])
+
+  const reset = useCallback(() => {
+    setPhase('scan')
     setStepIndex(0)
     setExitOpen(false)
-  }
-
-  const startFlow = (modeName) => {
-    if (modeName) setActiveMode(modeName)
-    setFlowStarted(true)
-    setStepIndex(1) // Advance from Welcome screen to next step
-  }
+  }, [])
 
   const next = useCallback(() => setStepIndex((i) => i + 1), [])
 
   const back = () => {
-    if (stepIndex <= 1) reset()
+    if (stepIndex <= 0) reset()
     else setStepIndex((i) => i - 1)
   }
+
+  /* -------------------------------------------------------------- */
+  /* Simulated passkey operations                                    */
+  /* -------------------------------------------------------------- */
+
+  /**
+   * Returning guest: the device passkey signs a challenge, ChqIn checks the
+   * proof. `assertion` comes from the real ceremony, or is null when the
+   * screen ran the simulated one.
+   */
+  const verifyPasskey = useCallback(
+    async (assertion) => {
+      const credentialId = assertion?.credentialId ?? detection.credential?.credentialId
+      const { ok, credential } = authenticate(credentialId)
+
+      if (ok && assertion?.real) {
+        // A failed proof must stop here. Letting the error escape would land
+        // the screen in its "ceremony broke" branch, which falls back to the
+        // simulated check — exactly the wrong response to a bad signature.
+        let proof
+        try {
+          proof = await verifyAssertion(assertion, credential)
+        } catch (err) {
+          proof = { ok: false, reason: err?.message ?? 'unreadable public key' }
+        }
+        if (!proof.ok) {
+          showToast(`Passkey proof rejected — ${proof.reason}`)
+          return false
+        }
+      }
+
+      if (!ok) {
+        // Credential no longer trusted — fall back to the new-device path
+        // rather than dead-ending the guest.
+        showToast('Device no longer recognised — re-enrolling')
+        setDetection(detect(SESSION))
+        setStepIndex(0)
+        return false
+      }
+      return true
+    },
+    [detection.credential, showToast],
+  )
+
+  /** The ceremony needs a user handle before a credential exists, so the
+   *  identity is minted first. This and `createPasskey` below must resolve to
+   *  the same record — they do because `createIdentity` is idempotent per
+   *  booking ref, which is what binds the WebAuthn user handle to the identity
+   *  the credential ends up on. */
+  const ensureIdentity = useCallback(
+    () => detection.identity ?? createIdentity(SESSION),
+    [detection.identity],
+  )
+
+  /** First time / new device: mint the identity if needed, then store the passkey. */
+  const createPasskey = useCallback(
+    (passkey) => {
+      const identity = detection.identity ?? createIdentity(SESSION)
+      const credential = registerCredential(identity.id, passkey)
+      setDetection({ mode: activeMode, identity, credential })
+    },
+    [detection.identity, activeMode],
+  )
 
   const screenProps = {
     next,
     showToast,
     onDone: reset,
-    onStartFlow: startFlow,
     activeMode,
-    setMode: setActiveMode,
+    credentialReal: detection.credential?.real ?? false,
+    verifyPasskey,
+    createPasskey,
+    ensureIdentity,
+    guestName: SESSION.guestName,
+    onRescan: reset,
   }
 
-  const showChrome = flowStarted && !step?.final
+  // A two-tap flow doesn't need a progress bar — it only earns one when there
+  // is more than a single chrome-bearing step to track.
+  const trackedSteps = currentFlowSteps.filter((s) => !s.bare && !s.final)
+  const trackedIndex = trackedSteps.indexOf(step)
+  const showChrome =
+    phase === 'flow' && !step?.final && !step?.bare && trackedSteps.length > 1
 
   return (
     <div className="grid min-h-dvh place-items-center sm:p-6 bg-slate-200/80">
@@ -139,13 +196,9 @@ export default function App() {
         <Toast toast={toast} />
 
         {/* Header — Back / Help / Close on in-flow screens */}
-        {flowStarted && !step?.fullBleed && (
+        {phase === 'flow' && !step?.fullBleed && !step?.bare && (
           <header className="pt-safe z-20 flex shrink-0 items-center justify-between px-6 pb-2.5 sm:pt-6 bg-white">
-            {step?.final ? (
-              <span className="size-9" />
-            ) : (
-              <IconButton icon={ChevronLeft} label="Back" onClick={back} />
-            )}
+            <IconButton icon={ChevronLeft} label="Back" onClick={back} />
             <p className="text-[12px] font-extrabold tracking-tight uppercase text-blue-600">
               Check-In
             </p>
@@ -155,13 +208,11 @@ export default function App() {
                 label="Help"
                 onClick={() => setHelpOpen(true)}
               />
-              {!step?.final && (
-                <IconButton
-                  icon={X}
-                  label="Close"
-                  onClick={() => setExitOpen(true)}
-                />
-              )}
+              <IconButton
+                icon={X}
+                label="Close"
+                onClick={() => setExitOpen(true)}
+              />
             </div>
           </header>
         )}
@@ -169,12 +220,18 @@ export default function App() {
         {/* Screen Viewport */}
         <main className="no-scrollbar relative flex-1 overflow-y-auto bg-white">
           <AnimatePresence mode="wait" initial={false}>
-            {!flowStarted ? (
-              <HotelWelcomeScreen
-                key="welcome-entry"
-                onStartFlow={startFlow}
-                activeMode={activeMode}
-                setMode={setActiveMode}
+            {phase === 'scan' ? (
+              <ScanScreen
+                key="scan"
+                onScanned={handleScanned}
+                onForgetDevice={() => {
+                  forgetDevice()
+                  showToast('Device passkeys cleared')
+                }}
+                onResetAll={() => {
+                  resetAll()
+                  showToast('Identity and passkeys cleared')
+                }}
               />
             ) : (
               <step.Screen key={`${activeMode}-${step.key}`} {...screenProps} />
@@ -186,12 +243,12 @@ export default function App() {
         {showChrome && (
           <footer className="pb-safe glass z-20 shrink-0 border-t border-slate-200/80 px-6 pt-3.5 sm:pb-5">
             <div className="mb-3 flex items-center justify-between">
-              <Stepper steps={currentFlowSteps.map((s) => s.label)} current={stepIndex} />
+              <Stepper steps={trackedSteps.map((s) => s.label)} current={trackedIndex} />
               <span className="text-[11px] font-bold text-slate-400">
-                {stepIndex + 1}/{currentFlowSteps.length}
+                {trackedIndex + 1}/{trackedSteps.length}
               </span>
             </div>
-            <ProgressBar value={(stepIndex + 1) / currentFlowSteps.length} />
+            <ProgressBar value={(trackedIndex + 1) / trackedSteps.length} />
           </footer>
         )}
 

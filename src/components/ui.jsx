@@ -1,6 +1,6 @@
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Check, LoaderCircle, ScanFace, ShieldCheck, X } from 'lucide-react'
+import { Check, LoaderCircle, ShieldCheck, X } from 'lucide-react'
 
 /**
  * Overlays portal into the phone shell so they cover the header too, no
@@ -333,7 +333,7 @@ export function BiometricPromptSheet({ open, onComplete, title = "Device Biometr
                 {title}
               </h3>
               <p className="mt-1 text-[13px] font-medium text-slate-500 max-w-[250px]">
-                Authenticating via Face ID / Fingerprint
+                Authenticating with your device unlock
               </p>
 
               <div className="mt-6 flex w-full justify-center">

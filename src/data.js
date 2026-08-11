@@ -11,6 +11,13 @@ export const HOTEL = {
   checkOut: 'Sat, 8 Aug · 11:00 AM',
 }
 
+// What the scanned QR resolves to: which hotel, and which check-in session.
+export const SESSION = {
+  hotel: HOTEL.name,
+  bookingRef: HOTEL.booking,
+  guestName: HOTEL.guest,
+}
+
 export const GUEST = {
   name: 'Rahul Sharma',
   phone: '+91 XXXXXXX248',
