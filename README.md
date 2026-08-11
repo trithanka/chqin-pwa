@@ -221,6 +221,19 @@ returning one by the time they finish.
 **Challenges are single-use**, consumed by the `UPDATE ... RETURNING` that reads
 them, so a replay finds nothing rather than being compared and rejected.
 
+**`POST /identity/verifications` is an authorization gate, not a flow step.**
+It is the only thing standing between a scanned QR and enrolling a passkey
+against that reservation — and it is currently a stub that passes for anyone
+who calls it. Until a real KYC check sits behind it, someone who obtains a
+first-time booking QR can enrol their own passkey against that booking. That is
+the gap to close before this touches a real guest, not a detail.
+
+**Issuing ceremony options is not authentication.** Only a verified
+registration or assertion sets `checkin_sessions.guest_id`, which is what
+`/checkin` requires; the guest row itself is created at registration-verify
+time, so an abandoned ceremony leaves nothing behind. Both cases are in the
+test suite because the first version of this file got the first one wrong.
+
 **A desk QR has no reservation.** After a ceremony identifies the guest,
 `attachBooking` looks for their confirmed arrival today. A booking made without
 a ChqIn identity attached can't be matched this way — matching a walk-up guest

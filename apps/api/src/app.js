@@ -232,25 +232,38 @@ app.post('/identity/verifications', async (c) => {
 /* WebAuthn: registration                                              */
 /* ------------------------------------------------------------------ */
 
-/** The identity has to exist before the ceremony, because it is the user handle. */
-async function ensureGuest(client, session) {
+/**
+ * The ceremony needs a user handle up front, but a guest who never finishes
+ * shouldn't leave a row behind — so an unknown guest gets a handle minted on
+ * the challenge and becomes a row only when registration verifies.
+ */
+async function resolveUserHandle(client, session) {
   if (session.booking_guest_id) {
-    const { rows } = await query('SELECT * FROM guests WHERE id = $1', [session.booking_guest_id])
-    if (rows[0]) return rows[0]
+    const { rows } = await client.query('SELECT id, display_name FROM guests WHERE id = $1', [
+      session.booking_guest_id,
+    ])
+    if (rows[0]) return { guestId: rows[0].id, handle: rows[0].id, name: rows[0].display_name }
   }
+  const { rows } = await client.query('SELECT uuid_v7() AS id')
+  return { guestId: null, handle: rows[0].id, name: session.guest_name ?? 'Guest' }
+}
+
+/** Called only from registration/verify, once there is a real credential. */
+async function materialiseGuest(client, challenge, session) {
+  if (challenge.guest_id) return challenge.guest_id
 
   const { rows } = await client.query(
-    `INSERT INTO guests (display_name, email_hmac) VALUES ($1, $2) RETURNING *`,
-    [session.guest_name ?? 'Guest', lookupHash(null)],
+    `INSERT INTO guests (id, display_name, email_hmac) VALUES ($1, $2, $3) RETURNING id`,
+    [challenge.pending_user_handle, challenge.pending_display_name ?? 'Guest', lookupHash(null)],
   )
-  const guest = rows[0]
+  const guestId = rows[0].id
   if (session.booking_id) {
     await client.query('UPDATE bookings SET guest_id = $1 WHERE id = $2 AND guest_id IS NULL', [
-      guest.id,
+      guestId,
       session.booking_id,
     ])
   }
-  return guest
+  return guestId
 }
 
 app.post('/webauthn/registration/options', async (c) => {
@@ -275,20 +288,20 @@ app.post('/webauthn/registration/options', async (c) => {
   }
 
   const result = await transaction(async (client) => {
-    const guest = await ensureGuest(client, session)
+    const guest = await resolveUserHandle(client, session)
 
     const { rows: existing } = await client.query(
       `SELECT credential_id, transports FROM credentials
         WHERE guest_id = $1 AND revoked_at IS NULL`,
-      [guest.id],
+      [guest.guestId],
     )
 
     const options = await generateRegistrationOptions({
       rpName: RP_NAME,
       rpID: RP_ID,
-      userID: new TextEncoder().encode(guest.id),
-      userName: guest.display_name,
-      userDisplayName: guest.display_name,
+      userID: new TextEncoder().encode(guest.handle),
+      userName: guest.name,
+      userDisplayName: guest.name,
       attestationType: 'none',
       // Enrolling the same device twice would leave a dead credential behind.
       excludeCredentials: existing.map((row) => ({
@@ -304,15 +317,12 @@ app.post('/webauthn/registration/options', async (c) => {
     })
 
     const { rows: challenge } = await client.query(
-      `INSERT INTO webauthn_challenges (session_id, guest_id, purpose, challenge, expires_at)
-       VALUES ($1, $2, 'registration', $3, now() + ($4 || ' milliseconds')::interval)
+      `INSERT INTO webauthn_challenges
+         (session_id, guest_id, pending_user_handle, pending_display_name, purpose, challenge, expires_at)
+       VALUES ($1, $2, $3, $4, 'registration', $5, now() + ($6 || ' milliseconds')::interval)
        RETURNING id`,
-      [session.id, guest.id, options.challenge, CHALLENGE_TTL_MS],
+      [session.id, guest.guestId, guest.handle, guest.name, options.challenge, CHALLENGE_TTL_MS],
     )
-    await client.query('UPDATE checkin_sessions SET guest_id = $1 WHERE id = $2', [
-      guest.id,
-      session.id,
-    ])
     return { options, challengeId: challenge[0].id }
   })
 
@@ -378,6 +388,7 @@ app.post('/webauthn/registration/verify', async (c) => {
         throw Object.assign(new Error('Passkey could not be verified.'), { code: 'unverified' })
       }
 
+      const guestId = await materialiseGuest(client, challenge, session)
       const { credential, aaguid, credentialBackedUp, credentialDeviceType } =
         verification.registrationInfo
       const coseKey = decodeCredentialPublicKey(credential.publicKey)
@@ -390,7 +401,7 @@ app.post('/webauthn/registration/verify', async (c) => {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING id, credential_id`,
         [
-          challenge.guest_id,
+          guestId,
           credential.id,
           Buffer.from(credential.publicKey),
           alg,
@@ -402,8 +413,14 @@ app.post('/webauthn/registration/verify', async (c) => {
           data.deviceLabel,
         ],
       )
-      await attachBooking(client, session, challenge.guest_id)
-      return { credential: rows[0], guestId: challenge.guest_id }
+      // Only now is the session authenticated: a verified ceremony, not a
+      // request for options, is what says who the guest is.
+      await client.query('UPDATE checkin_sessions SET guest_id = $1 WHERE id = $2', [
+        guestId,
+        session.id,
+      ])
+      await attachBooking(client, session, guestId)
+      return { credential: rows[0], guestId }
     })
 
     await logEvent(c, {
