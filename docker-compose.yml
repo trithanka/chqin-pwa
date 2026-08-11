@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: chqin-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: chqin
+      POSTGRES_PASSWORD: chqin
+      POSTGRES_DB: chqin
+    # 5439 rather than 5432: this machine may already run other Postgres
+    # containers, and a port clash silently connects you to the wrong database.
+    ports:
+      - '5439:5432'
+    volumes:
+      - chqin-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U chqin -d chqin']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  chqin-pgdata:

@@ -9,19 +9,19 @@ device, and naming the wrong one reads as broken. Where there's room, all three
 are listed.
 
 **The camera is real; everything the app claims to do with the picture is
-not.** Two screens open the rear camera ([src/useCamera.js](src/useCamera.js)):
+not.** Two screens open the rear camera ([apps/web/src/useCamera.js](apps/web/src/useCamera.js)):
 the scan screen decodes QR codes for real, and the identity screen takes an
 actual photo of the guest's ID. That photo is never read, uploaded or stored —
 it's a data URL held in component state for the length of the animation, and
 "Reading document…" is a timer.
 
 **Passkeys are real WebAuthn** where the platform can run it
-([src/passkey.js](src/passkey.js)) — a discoverable, device-bound credential
+([apps/web/src/passkey.js](apps/web/src/passkey.js)) — a discoverable, device-bound credential
 created and asserted by the real platform authenticator, and a real ES256
 signature check via WebCrypto. What isn't real is the *verifier*: with no
 backend the page checks its own challenge, which is a demo, not a security
 boundary. Identity records still live in localStorage
-([src/identity.js](src/identity.js)).
+([apps/web/src/identity.js](apps/web/src/identity.js)).
 
 **The camera needs a secure context** — `https://` or `localhost`. Over a plain
 `http://` LAN IP the API is absent entirely, so both screens say so and fall
@@ -41,20 +41,42 @@ simulated prompt sheet when it's missing, saying why.
 
 ```bash
 npm install
-npm run dev      # localhost:5173, plus a LAN URL for your phone
+npm run dev          # PWA on localhost:5173, plus a LAN URL for your phone
+npm run db:up        # Postgres 17 in Docker on :5439
+npm run db:migrate   # apply migrations
+npm run seed --workspace @chqin/api   # a hotel, 3 reservations, QR tokens
+npm run dev:api      # API on localhost:8787
 npm run build
 ```
 
 Designed at 390px. On a desktop viewport it renders inside a centred phone shell.
 
+## Layout
+
+One repo, npm workspaces. The API and the PWA change together while the
+contract is still moving, and they deploy same-origin — which is what keeps the
+WebAuthn RP ID and the origin check trivially correct.
+
+| Path | What it is |
+| --- | --- |
+| [apps/web/](apps/web/) | The guest PWA — React, Vite, Tailwind |
+| [apps/api/](apps/api/) | The API: WebAuthn relying party + check-in state machine (Hono, Postgres) |
+| [packages/shared/](packages/shared/) | The contract both sides validate against (zod) |
+| [docs/data-model.md](docs/data-model.md) | Why the schema looks the way it does |
+
+**The PWA does not talk to the API yet.** It still runs entirely on
+localStorage — the two halves exist and both work, but wiring the client to the
+server is the next step.
+
 ## PWA
 
 Installable and fully offline. `vite-plugin-pwa` (Workbox) generates the
 manifest and service worker at build time — config lives in
-[vite.config.js](vite.config.js), there is no manifest file to maintain.
+[apps/web/vite.config.js](apps/web/vite.config.js), there is no manifest file to
+maintain.
 
 The service worker precaches the whole build, Inter included (self-hosted in
-[public/fonts/](public/fonts/) so the app makes zero external requests). After
+[apps/web/public/fonts/](apps/web/public/fonts/) so the app makes zero external requests). After
 one load it runs with the network off.
 
 `registerType: 'autoUpdate'` — a new deploy installs silently on next launch
@@ -77,7 +99,7 @@ the real thing, host it (any static host) or tunnel —
 `cloudflared tunnel --url http://localhost:5173`.
 
 Header and footer pad with `pt-safe` / `pb-safe`
-([src/index.css](src/index.css)) so nothing sits under a notch or home
+([apps/web/src/index.css](apps/web/src/index.css)) so nothing sits under a notch or home
 indicator once it's running standalone.
 
 ## Identity model
@@ -119,7 +141,7 @@ prototype affordance; a real deployment would refuse and re-enrol.
 ## Flows
 
 **The guest never picks a flow.** Once the camera reads the QR, `detect()` in
-[src/identity.js](src/identity.js) compares this device's passkeys against the
+[apps/web/src/identity.js](apps/web/src/identity.js) compares this device's passkeys against the
 identity records and the booking behind the QR, and the app routes itself:
 
 | Detected | When | Steps |
@@ -146,17 +168,17 @@ scan is a returning check-in.
 
 | Path | What it holds |
 | --- | --- |
-| [src/App.jsx](src/App.jsx) | Detection on scan, flow state machine, header (Back/Help/Close), bottom progress + stepper, help sheet, exit modal, toast |
-| [src/identity.js](src/identity.js) | Identity records + device hint store, `detect()`, enrolment, credential lookup, prototype resets |
-| [src/passkey.js](src/passkey.js) | WebAuthn create/get ceremonies, capability probe, ES256/RS256 assertion verification |
-| [src/useCamera.js](src/useCamera.js) | `useCamera` — rear-camera stream, still capture, permission/secure-context states, teardown; `useQrCamera` — the same plus the QR decode loop |
-| [src/data.js](src/data.js) | All placeholder data — hotel, room, guest, QR session |
-| [src/components/ui.jsx](src/components/ui.jsx) | Buttons, progress bar, stepper, card, skeleton, bottom sheet, modal, toast, biometric prompt sheet, screen wrapper |
-| [src/components/cards.jsx](src/components/cards.jsx) | Biometric card, document scan card, success card |
-| [src/components/Confetti.jsx](src/components/Confetti.jsx) | Dependency-free confetti burst |
-| [src/screens/](src/screens/) | One file per screen |
+| [apps/web/src/App.jsx](apps/web/src/App.jsx) | Detection on scan, flow state machine, header (Back/Help/Close), bottom progress + stepper, help sheet, exit modal, toast |
+| [apps/web/src/identity.js](apps/web/src/identity.js) | Identity records + device hint store, `detect()`, enrolment, credential lookup, prototype resets |
+| [apps/web/src/passkey.js](apps/web/src/passkey.js) | WebAuthn create/get ceremonies, capability probe, ES256/RS256 assertion verification |
+| [apps/web/src/useCamera.js](apps/web/src/useCamera.js) | `useCamera` — rear-camera stream, still capture, permission/secure-context states, teardown; `useQrCamera` — the same plus the QR decode loop |
+| [apps/web/src/data.js](apps/web/src/data.js) | All placeholder data — hotel, room, guest, QR session |
+| [apps/web/src/components/ui.jsx](apps/web/src/components/ui.jsx) | Buttons, progress bar, stepper, card, skeleton, bottom sheet, modal, toast, biometric prompt sheet, screen wrapper |
+| [apps/web/src/components/cards.jsx](apps/web/src/components/cards.jsx) | Biometric card, document scan card, success card |
+| [apps/web/src/components/Confetti.jsx](apps/web/src/components/Confetti.jsx) | Dependency-free confetti burst |
+| [apps/web/src/screens/](apps/web/src/screens/) | One file per screen |
 
-Flows are declared as arrays in [App.jsx](src/App.jsx) — the stepper and progress
+Flows are declared as arrays in [App.jsx](apps/web/src/App.jsx) — the stepper and progress
 bar derive their labels and percentages from those arrays, so adding or removing
 a step needs no other change.
 
@@ -166,8 +188,41 @@ which screen opened them.
 ## Stack
 
 React 19 · Vite · Tailwind CSS v4 (CSS-first, tokens in
-[src/index.css](src/index.css)) · Framer Motion · Lucide · Inter
+[apps/web/src/index.css](apps/web/src/index.css)) · Framer Motion · Lucide · Inter
 
 Brand `#2563EB`, success `#16A34A`, canvas `#F8FAFC`.
 # chqin-pwa
 # chqin-pwa
+
+## API
+
+The server is the relying party: it issues challenges, verifies assertions, and
+decides the journey. The client holds hints and renders — it never asserts who
+the guest is.
+
+| Route | Does |
+| --- | --- |
+| `POST /sessions/resolve` | QR token → session. A `desk` QR mints a short-lived child session per scan |
+| `POST /detect` | Device's credential-ID hints + the session's booking → `returning` / `newDevice` / `firstTime`, recorded on the session |
+| `POST /identity/verifications` | Records the one-time check. A device may not enrol without one in this session |
+| `POST /webauthn/registration/options` \| `/verify` | Discoverable platform credential, verified and stored with its COSE key |
+| `POST /webauthn/authentication/options` \| `/verify` | Empty `allowCredentials`, verified signature, sign-counter clone check |
+| `POST /checkin` | Idempotent per `(booking, key)` — a retry after a dropped response returns the original check-in |
+
+Everything that matters is enforced server-side, and each attempt lands in
+`auth_events` whether it succeeded or not.
+
+### Things worth knowing
+
+**The journey is recorded at detection**, not recomputed at check-in — enrolment
+sets `bookings.guest_id`, so a first-time guest would otherwise look like a
+returning one by the time they finish.
+
+**Challenges are single-use**, consumed by the `UPDATE ... RETURNING` that reads
+them, so a replay finds nothing rather than being compared and rejected.
+
+**A desk QR has no reservation.** After a ceremony identifies the guest,
+`attachBooking` looks for their confirmed arrival today. A booking made without
+a ChqIn identity attached can't be matched this way — matching a walk-up guest
+to an unlinked reservation (by name? by staff confirmation?) is a product
+decision, not a coding one, and is deliberately left open.
