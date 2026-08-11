@@ -42,6 +42,7 @@ simulated prompt sheet when it's missing, saying why.
 ```bash
 npm install
 npm run dev          # PWA on localhost:5173, plus a LAN URL for your phone
+npm run dev:dashboard # business dashboard on localhost:5174
 npm run db:up        # Postgres 17 in Docker on :5439
 npm run db:migrate   # apply migrations
 npm run seed --workspace @chqin/api   # a hotel, 3 reservations, QR tokens
@@ -60,6 +61,7 @@ WebAuthn RP ID and the origin check trivially correct.
 | Path | What it is |
 | --- | --- |
 | [apps/web/](apps/web/) | The guest PWA — React, Vite, Tailwind |
+| [apps/dashboard/](apps/dashboard/) | ChqIn for Business — property onboarding (UI only so far) |
 | [apps/api/](apps/api/) | The API: WebAuthn relying party + check-in state machine (Hono, Postgres) |
 | [packages/shared/](packages/shared/) | The contract both sides validate against (zod) |
 | [docs/data-model.md](docs/data-model.md) | Why the schema looks the way it does |
@@ -239,3 +241,31 @@ test suite because the first version of this file got the first one wrong.
 a ChqIn identity attached can't be matched this way — matching a walk-up guest
 to an unlinked reservation (by name? by staff confirmation?) is a product
 decision, not a coding one, and is deliberately left open.
+
+## Dashboard
+
+`apps/dashboard` is the hotel-facing side: the six-step property onboarding a
+business lands on after the marketing site's "onboard your property" CTA —
+account, property, rooms, team, check-in QR, go live.
+
+**UI only — it does not talk to the API.** But everything that can work
+locally does: validation, the room range builder, invitations, a real QR
+rendered to the printable desk card, and a draft (including your position in
+the flow) that survives a refresh. Only "Go live" is a stand-in.
+
+Desktop-first at 620px of content beside a dark step rail, which is the
+opposite of the guest app on purpose — this is a tool used at a desk, not a
+moment in a lobby.
+
+Two decisions worth keeping when it gets wired up:
+
+**No password field.** Staff sign in with a passkey or an emailed link, so
+onboarding never creates a credential the product doesn't want to hold.
+
+**The room range builder is the primary control**, with single-room entry as
+the fallback. Nobody types eighty rooms one at a time, and the person doing
+this is doing it once.
+
+Before it can do anything real, the API needs the tables the data model
+deliberately deferred — `staff_users`, `staff_memberships`, `invitations` —
+plus a staff auth surface separate from the guest one.
