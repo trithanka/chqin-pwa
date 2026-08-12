@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { ArrowRight, Building2, Fingerprint, Lock, QrCode, UserCheck } from 'lucide-react'
 import { IconButton, PrimaryButton, Screen } from '../components/ui'
+import Logo from '../components/Logo'
 import { GUEST, HOTEL } from '../data'
 
 /**
@@ -38,12 +39,7 @@ export default function HotelWelcomeScreen({ next, activeMode, onRescan }) {
       <div>
         {/* Brand header */}
         <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-2 text-slate-900 font-extrabold tracking-tight text-[18px]">
-            <span className="grid size-7 place-items-center rounded-xl bg-blue-600 text-white text-[12px] font-black shadow-sm">
-              C
-            </span>
-            ChqIn
-          </div>
+          <Logo className="h-6 w-auto text-slate-900" />
 
           {onRescan && (
             <IconButton icon={QrCode} label="Scan another QR" onClick={onRescan} subtle />

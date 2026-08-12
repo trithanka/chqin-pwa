@@ -199,7 +199,23 @@ which screen opened them.
 React 19 · Vite · Tailwind CSS v4 (CSS-first, tokens in
 [apps/web/src/index.css](apps/web/src/index.css)) · Framer Motion · Lucide · Inter
 
-Brand `#2563EB`, success `#16A34A`, canvas `#F8FAFC`.
+## Brand
+
+The mark is `CIn` — a white C with the `In` in green — and it ships as SVG with
+**no background**, so it sits on whatever it's placed on.
+
+| Asset | What it's for |
+| --- | --- |
+| [logo.svg](apps/web/public/logo.svg) | The wordmark. The C is `currentColor`; the green is fixed |
+| [icon.svg](apps/web/public/icon.svg) | Tab icon — the C and the bar only, since a wordmark is mush at 16px |
+| `icon-180/192/512.png` | Home-screen icons, on black — iOS paints transparency black anyway, and a maskable icon has to fill its canvas |
+| [Logo.jsx](apps/web/src/components/Logo.jsx) | The same mark inline, so it inherits text colour |
+
+The tab icon's C follows the viewer's theme (`prefers-color-scheme` inside the
+SVG): a white C vanishes on a light tab strip and a dark one vanishes on a dark
+strip. The green never changes — it's the half that has to stay recognisable.
+
+Logo green `#22DD66`, brand `#2563EB`, success `#16A34A`, canvas `#F8FAFC`.
 # chqin-pwa
 # chqin-pwa
 

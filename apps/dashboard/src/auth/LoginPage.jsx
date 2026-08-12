@@ -4,6 +4,7 @@ import { ArrowRight } from 'lucide-react'
 import { Button, Field, Input, Panel } from '../components/ui'
 import PasswordField from '../components/PasswordField'
 import { useSession } from '../session'
+import Logo from '../components/Logo'
 
 /**
  * Staff sign-in: email and password, set during registration.
@@ -106,13 +107,9 @@ export function AuthShell({ title, sub, children, footer }) {
       {/* Brand side — hidden on narrow screens, where it's just noise */}
       <aside className="hidden flex-col justify-between bg-rail p-12 text-white lg:flex">
         <div className="flex items-center gap-2.5">
-          <span className="grid size-8 place-items-center rounded-xl bg-brand text-[13px] font-black">
-            C
-          </span>
-          <div className="leading-tight">
-            <p className="text-[15px] font-bold tracking-[-0.02em]">ChqIn</p>
-            <p className="text-[11.5px] font-medium text-white/45">for business</p>
-          </div>
+          <Logo className="h-7 w-auto text-white" />
+          <span className="h-6 w-px bg-white/15" />
+          <p className="text-[12px] font-semibold tracking-[-0.01em] text-white/45">for business</p>
         </div>
 
         <div className="max-w-[30ch]">
@@ -131,10 +128,7 @@ export function AuthShell({ title, sub, children, footer }) {
       <main className="flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-[380px]">
           <div className="mb-7 flex items-center gap-2.5 lg:hidden">
-            <span className="grid size-8 place-items-center rounded-xl bg-brand text-[13px] font-black text-white">
-              C
-            </span>
-            <p className="text-[15px] font-bold tracking-[-0.02em] text-slate-900">ChqIn</p>
+            <Logo className="h-7 w-auto text-slate-900" />
           </div>
 
           <h1 className="text-[24px] font-extrabold tracking-[-0.03em] text-slate-900">{title}</h1>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Camera, Check, QrCode, Zap } from 'lucide-react'
+import { Camera, Check, QrCode } from 'lucide-react'
+import Logo from '../components/Logo'
 import { PrimaryButton } from '../components/ui'
 import { useQrCamera } from '../useCamera'
 
@@ -39,12 +40,7 @@ export default function ScanScreen({ onScanned, onForgetDevice, onResetAll }) {
       exit={{ opacity: 0 }}
       className="flex min-h-full flex-col bg-gradient-to-b from-[#090d1a] via-[#0f172a] to-[#1e293b] pt-safe pb-safe px-5 text-white [--pb-safe-min:2rem] [--pt-safe-min:3.5rem]"
     >
-      <div className="flex items-center gap-2">
-        <span className="grid size-9 place-items-center rounded-xl bg-white/10 backdrop-blur border border-white/15 shadow-[0_0_20px_rgba(37,99,235,0.3)]">
-          <Zap size={17} strokeWidth={2.6} className="text-blue-400" />
-        </span>
-        <span className="text-[17px] font-extrabold tracking-[-0.03em]">ChqIn</span>
-      </div>
+      <Logo className="h-7 w-auto self-start text-white" />
 
       <div className="mt-7">
         <h1 className="text-[30px] font-bold leading-[1.15] tracking-[-0.035em]">

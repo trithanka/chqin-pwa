@@ -8,6 +8,7 @@ import RoomsStep from './steps/RoomsStep'
 import TeamStep from './steps/TeamStep'
 import QrStep from './steps/QrStep'
 import LiveStep from './steps/LiveStep'
+import Logo from '../components/Logo'
 
 /**
  * Property onboarding — what a hotel does once, after clicking "onboard your
@@ -120,13 +121,9 @@ export default function OnboardingWizard({ onComplete }) {
       {/* Left rail — where they are, and how much is left */}
       <aside className="print-hide bg-rail px-7 py-8 lg:w-[310px] lg:shrink-0 lg:py-10">
         <div className="flex items-center gap-2.5 text-white">
-          <span className="grid size-8 place-items-center rounded-xl bg-brand text-[13px] font-black shadow-sm">
-            C
-          </span>
-          <div className="leading-tight">
-            <p className="text-[15px] font-bold tracking-[-0.02em]">ChqIn</p>
-            <p className="text-[11.5px] font-medium text-white/45">for business</p>
-          </div>
+          <Logo className="h-7 w-auto text-white" />
+          <span className="h-6 w-px bg-white/15" />
+          <p className="text-[12px] font-semibold tracking-[-0.01em] text-white/45">for business</p>
         </div>
 
         <div className="mt-9 hidden lg:block">

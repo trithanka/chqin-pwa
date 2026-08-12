@@ -3,6 +3,7 @@ import QRCode from 'qrcode'
 import { Check, Copy, Printer } from 'lucide-react'
 import { Button, Panel } from '../../components/ui'
 import StepHeader from '../../components/StepHeader'
+import Logo from '../../components/Logo'
 
 /**
  * The desk card. One QR per property, printed once and left on the counter —
@@ -81,11 +82,9 @@ export default function QrStep({ data }) {
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-400">
-          <span className="grid size-4 place-items-center rounded bg-slate-900 text-[8px] font-black text-white">
-            C
-          </span>
-          Powered by ChqIn
+        <div className="flex items-center gap-2 text-[12px] font-semibold text-slate-400">
+          <span>Powered by</span>
+          <Logo className="h-3.5 w-auto text-slate-500" />
         </div>
       </Panel>
 
