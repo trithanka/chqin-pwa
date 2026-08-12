@@ -9,16 +9,18 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace @chqin/web",
+    "dev:dashboard": "npm run dev --workspace @chqin/dashboard",
     "dev:api": "npm run dev --workspace @chqin/api",
+    "dev:all": "concurrently -n web,dash,api -c blue,magenta,green \"npm:dev\" \"npm:dev:dashboard\" \"npm:dev:api\"",
     "build": "npm run build --workspace @chqin/web && npm run build --workspace @chqin/dashboard",
     "preview": "npm run preview --workspace @chqin/web",
     "lint": "oxlint",
     "db:up": "docker compose up -d",
     "db:migrate": "npm run migrate --workspace @chqin/api",
-    "db:psql": "docker exec -it chqin-postgres psql -U chqin -d chqin",
-    "dev:dashboard": "npm run dev --workspace @chqin/dashboard"
+    "db:psql": "docker exec -it chqin-postgres psql -U chqin -d chqin"
   },
   "devDependencies": {
+    "concurrently": "^10.0.4",
     "oxlint": "^1.75.0"
   }
 }

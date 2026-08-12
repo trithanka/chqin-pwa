@@ -5,5 +5,5 @@ import tailwindcss from '@tailwindcss/vite'
 // 5174 so the guest PWA (5173) and the dashboard can run side by side.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  server: { port: 5174, host: true },
+  server: { port: 5174, host: true, strictPort: true },
 })

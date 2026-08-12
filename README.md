@@ -41,14 +41,21 @@ simulated prompt sheet when it's missing, saying why.
 
 ```bash
 npm install
-npm run dev          # PWA on localhost:5173, plus a LAN URL for your phone
-npm run dev:dashboard # business dashboard on localhost:5174
 npm run db:up        # Postgres 17 in Docker on :5439
 npm run db:migrate   # apply migrations
 npm run seed --workspace @chqin/api   # a hotel, 3 reservations, QR tokens
-npm run dev:api      # API on localhost:8787
+
+npm run dev:all      # guest PWA :5173 · dashboard :5174 · API :8787
 npm run build
 ```
+
+`dev:all` runs all three in one terminal with prefixed, colour-coded logs, and
+one Ctrl-C stops the lot. To run them separately — better when you're
+iterating on one and want its output clean — use `npm run dev`,
+`npm run dev:dashboard` and `npm run dev:api` in their own terminals.
+
+Both front ends pin their ports with `strictPort`, so a stale dev server makes
+the next one fail loudly instead of quietly landing on its neighbour's port.
 
 Designed at 390px. On a desktop viewport it renders inside a centred phone shell.
 

@@ -5,6 +5,9 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // strictPort: fail loudly rather than drifting onto 5174, which belongs to
+  // the dashboard. A silently reassigned port is a confusing half-hour.
+  server: { host: true, port: 5173, strictPort: true },
   plugins: [
     react(),
     tailwindcss(),
