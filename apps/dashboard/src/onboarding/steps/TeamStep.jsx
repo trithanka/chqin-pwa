@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Plus, Trash2, Users } from 'lucide-react'
-import { Button, EmptyState, Field, Input, Panel, Pill, Select } from '../components/ui'
-import StepHeader from '../components/StepHeader'
+import { Button, EmptyState, Field, Input, Panel, Pill, Select } from '../../components/ui'
+import StepHeader from '../../components/StepHeader'
 
 const ROLES = {
   manager: 'Manager',

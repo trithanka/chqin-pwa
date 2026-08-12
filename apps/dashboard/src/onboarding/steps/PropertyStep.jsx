@@ -1,5 +1,5 @@
-import { Field, Input, Select } from '../components/ui'
-import StepHeader from '../components/StepHeader'
+import { Field, Input, Select } from '../../components/ui'
+import StepHeader from '../../components/StepHeader'
 
 // Enough to cover the markets a first deployment plausibly touches. The list
 // grows when a property outside it signs up, not before.

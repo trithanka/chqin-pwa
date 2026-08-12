@@ -301,14 +301,28 @@ decision, not a coding one, and is deliberately left open.
 
 ## Dashboard
 
-`apps/dashboard` is the hotel-facing side: the six-step property onboarding a
-business lands on after the marketing site's "onboard your property" CTA —
-account, property, rooms, team, check-in QR, go live.
+`apps/dashboard` is the venue-facing side — ChqIn for Business.
 
-**UI only — it does not talk to the API.** But everything that can work
-locally does: validation, the room range builder, invitations, a real QR
-rendered to the printable desk card, and a draft (including your position in
-the flow) that survives a refresh. Only "Go live" is a stand-in.
+| Route | What's there |
+| --- | --- |
+| `/` | Sign in — a passkey, or a link to a work email. No password field |
+| `/register` | Setting up a property *is* registering: the six-step onboarding |
+| `/app` | Today — arrivals, who's in, who's still coming |
+| `/app/bookings` | Every reservation, filterable, with a detail page per booking |
+| `/app/guests` | People who have checked in here, and what devices they hold |
+| `/app/code` | The desk card again, because cards get spilled on |
+
+**UI only — nothing talks to the API.** Onboarding does everything it can
+locally: validation, the room range builder, invitations, a real QR on the
+printable desk card, and a draft (including your position in the flow) that
+survives a refresh. The signed-in screens read
+[src/data/mock.js](apps/dashboard/src/data/mock.js), whose rows are shaped like
+the tables in [docs/data-model.md](docs/data-model.md) so they become fetches
+without reshaping the components.
+
+The booking detail says *how* someone verified — returning, new device, first
+time — because that is the question a desk asks when something looks off, and
+it is the one thing a paper register could never answer.
 
 Desktop-first at 620px of content beside a dark step rail, which is the
 opposite of the guest app on purpose — this is a tool used at a desk, not a
@@ -325,4 +339,7 @@ this is doing it once.
 
 Before it can do anything real, the API needs the tables the data model
 deliberately deferred — `staff_users`, `staff_memberships`, `invitations` —
-plus a staff auth surface separate from the guest one.
+plus a staff auth surface separate from the guest one, and read endpoints
+(`GET /staff/bookings`, `GET /staff/guests`) behind it.
+[session.js](apps/dashboard/src/session.js) is the seam: it is the only module
+that knows who is signed in, so it is the only one that changes.

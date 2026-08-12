@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { BedDouble, Plus, Trash2 } from 'lucide-react'
-import { Button, EmptyState, Field, Input, Panel, Pill, Select } from '../components/ui'
-import StepHeader from '../components/StepHeader'
+import { Button, EmptyState, Field, Input, Panel, Pill, Select } from '../../components/ui'
+import StepHeader from '../../components/StepHeader'
 
 const ROOM_TYPES = ['Standard', 'Deluxe', 'Suite', 'Twin', 'Accessible']
 

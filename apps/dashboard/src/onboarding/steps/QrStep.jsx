@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import { Check, Copy, Printer } from 'lucide-react'
-import { Button, Panel } from '../components/ui'
-import StepHeader from '../components/StepHeader'
+import { Button, Panel } from '../../components/ui'
+import StepHeader from '../../components/StepHeader'
 
 /**
  * The desk card. One QR per property, printed once and left on the counter —

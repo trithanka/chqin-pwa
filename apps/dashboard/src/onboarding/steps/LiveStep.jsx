@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { ArrowRight, Building2, Check, RotateCcw, Users } from 'lucide-react'
-import { Button, Panel, Pill } from '../components/ui'
-import StepHeader from '../components/StepHeader'
+import { Button, Panel, Pill } from '../../components/ui'
+import StepHeader from '../../components/StepHeader'
 
 /**
  * The summary, and the only stand-in in this flow: "Go live" has nothing to
  * post to yet.
  */
-export default function LiveStep({ data, onRestart }) {
+export default function LiveStep({ data, onRestart, onComplete }) {
   const [live, setLive] = useState(false)
 
   if (live) {
@@ -26,7 +26,9 @@ export default function LiveStep({ data, onRestart }) {
         </p>
 
         <div className="mt-8 flex flex-wrap justify-center gap-2.5">
-          <Button iconRight={ArrowRight}>Go to dashboard</Button>
+          <Button iconRight={ArrowRight} onClick={() => onComplete?.(data)}>
+            Go to dashboard
+          </Button>
           <Button tone="ghost" icon={RotateCcw} onClick={onRestart}>
             Start over
           </Button>

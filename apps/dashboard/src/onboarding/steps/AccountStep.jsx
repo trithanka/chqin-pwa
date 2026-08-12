@@ -1,5 +1,5 @@
-import { Field, Input, Select } from '../components/ui'
-import StepHeader from '../components/StepHeader'
+import { Field, Input, Select } from '../../components/ui'
+import StepHeader from '../../components/StepHeader'
 
 /**
  * No password field. Staff will sign in with a passkey or an emailed link —

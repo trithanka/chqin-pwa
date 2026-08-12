@@ -177,3 +177,105 @@ export function StepRail({ steps, current, furthest, onJump }) {
     </ol>
   )
 }
+
+/* ------------------------------------------------------------------ */
+/* Dashboard primitives                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A number worth a glance. Dashboards are scanned, not read — so the figure
+ * carries the weight and everything around it stays quiet.
+ */
+export function StatTile({ label, value, sub, tone = 'neutral' }) {
+  const tones = {
+    neutral: 'text-slate-900',
+    good: 'text-emerald-600',
+    warn: 'text-amber-600',
+  }
+  return (
+    <Panel className="px-4 py-3.5">
+      <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">{label}</p>
+      <p className={`mt-1 text-[26px] font-extrabold tabular-nums tracking-[-0.03em] ${tones[tone]}`}>
+        {value}
+      </p>
+      {sub && <p className="mt-0.5 text-[12.5px] text-slate-500">{sub}</p>}
+    </Panel>
+  )
+}
+
+/** Status as shape and colour, not just a word — it has to read at a glance. */
+export function StatusPill({ tone = 'neutral', children }) {
+  const tones = {
+    neutral: 'bg-slate-100 text-slate-600 ring-slate-200',
+    good: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+    muted: 'bg-slate-50 text-slate-400 ring-slate-200',
+    bad: 'bg-red-50 text-red-700 ring-red-200',
+    brand: 'bg-brand-soft text-brand ring-blue-200',
+  }
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11.5px] font-semibold ring-1 ring-inset ${tones[tone]}`}
+    >
+      {children}
+    </span>
+  )
+}
+
+/** Wide tables scroll inside their own box; the page never scrolls sideways. */
+export function TableWrap({ children }) {
+  return (
+    <Panel className="overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] border-collapse text-left">{children}</table>
+      </div>
+    </Panel>
+  )
+}
+
+export function Th({ children, className = '' }) {
+  return (
+    <th
+      className={`border-b border-slate-200/80 px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400 ${className}`}
+    >
+      {children}
+    </th>
+  )
+}
+
+export function Td({ children, className = '' }) {
+  return <td className={`px-4 py-3 text-[13.5px] text-slate-600 ${className}`}>{children}</td>
+}
+
+export function SearchInput({ value, onChange, placeholder }) {
+  return (
+    <input
+      type="search"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className="h-10 w-full max-w-[280px] rounded-xl border border-slate-200 bg-white px-3.5 text-[14px] text-slate-900 placeholder:text-slate-400 focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/12"
+    />
+  )
+}
+
+/** Two-column facts, the shape most detail panels want. */
+export function DetailRow({ label, children }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 border-b border-slate-100 py-2.5 last:border-0">
+      <span className="text-[12.5px] font-medium text-slate-400">{label}</span>
+      <span className="text-right text-[13.5px] font-semibold text-slate-800">{children}</span>
+    </div>
+  )
+}
+
+export function PageHeader({ title, subtitle, actions }) {
+  return (
+    <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <h1 className="text-[22px] font-extrabold tracking-[-0.03em] text-slate-900">{title}</h1>
+        {subtitle && <p className="mt-1 text-[13.5px] text-slate-500">{subtitle}</p>}
+      </div>
+      {actions}
+    </div>
+  )
+}
