@@ -43,7 +43,7 @@ simulated prompt sheet when it's missing, saying why.
 npm install
 npm run db:up        # Postgres 17 in Docker on :5439
 npm run db:migrate   # apply migrations
-npm run seed --workspace @chqin/api   # a hotel, 3 reservations, QR tokens
+npm run db:seed      # a hotel, 3 reservations, QR tokens
 
 npm run dev:all      # guest PWA :5173 · dashboard :5174 · API :8787
 npm run build
@@ -202,6 +202,41 @@ React 19 · Vite · Tailwind CSS v4 (CSS-first, tokens in
 Brand `#2563EB`, success `#16A34A`, canvas `#F8FAFC`.
 # chqin-pwa
 # chqin-pwa
+
+## Database
+
+**Drizzle is the source of truth.** The schema lives in
+[apps/api/src/db/schema/](apps/api/src/db/schema/), split by domain so the
+identity/property boundary the data model depends on is visible in the file
+tree. SQL under `apps/api/drizzle/` is generated — never hand-edited.
+
+```bash
+npm run db:generate  # schema change → a migration file
+npm run db:migrate   # apply pending migrations (this is what production runs)
+npm run db:push      # sync the DB directly, skipping the migration file
+npm run db:studio    # browse the data
+npm run db:reset     # drop, migrate, seed — development only
+```
+
+`db:push` is for iterating locally. Once a schema is deployed, generate a
+migration and apply it: push works out the diff itself, and on a database with
+real guests in it that is a guess you don't want to take.
+
+Two things Drizzle can't express, and how they're handled:
+
+**uuidv7 is generated in Node** ([lib/ids.js](apps/api/src/lib/ids.js)) rather
+than by a Postgres function, so there's nothing to install in the database
+first. Time-ordered ids keep B-tree inserts append-only where v4 scatters them.
+
+**`auth_events` isn't partitioned yet.** It's the one table that grows without
+bound, and `PARTITION BY` has no Drizzle representation — so converting it to
+monthly partitions is a hand-written ops migration, after which `db:push` must
+stay away from that table. Documented in
+[schema/auth.js](apps/api/src/db/schema/auth.js).
+
+`db:reset` drops the `drizzle` bookkeeping schema as well as `public` —
+dropping only `public` leaves the migration log behind, and the next migrate
+cheerfully reports "up to date" against an empty database.
 
 ## API
 

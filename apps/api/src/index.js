@@ -1,11 +1,10 @@
 import { serve } from '@hono/node-server'
 import { app } from './app.js'
-import { pool } from './db.js'
+import { config } from './config.js'
+import { pool } from './db/client.js'
 
-const port = Number(process.env.PORT ?? 8787)
-
-const server = serve({ fetch: app.fetch, port }, (info) => {
-  console.log(`ChqIn API on http://localhost:${info.port}  (RP ID: ${process.env.RP_ID ?? 'localhost'})`)
+const server = serve({ fetch: app.fetch, port: config.PORT }, (info) => {
+  console.log(`ChqIn API on http://localhost:${info.port}  (RP ID: ${config.RP_ID})`)
 })
 
 // Drain in-flight requests and close the pool, so `node --watch` restarts and

@@ -16,8 +16,13 @@
     "preview": "npm run preview --workspace @chqin/web",
     "lint": "oxlint",
     "db:up": "docker compose up -d",
-    "db:migrate": "npm run migrate --workspace @chqin/api",
-    "db:psql": "docker exec -it chqin-postgres psql -U chqin -d chqin"
+    "db:migrate": "npm run db:migrate --workspace @chqin/api",
+    "db:psql": "docker exec -it chqin-postgres psql -U chqin -d chqin",
+    "db:generate": "npm run db:generate --workspace @chqin/api",
+    "db:push": "npm run db:push --workspace @chqin/api",
+    "db:studio": "npm run db:studio --workspace @chqin/api",
+    "db:seed": "npm run db:seed --workspace @chqin/api",
+    "db:reset": "npm run db:reset --workspace @chqin/api"
   },
   "devDependencies": {
     "concurrently": "^10.0.4",

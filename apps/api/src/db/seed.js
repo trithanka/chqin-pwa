@@ -1,0 +1,76 @@
+import { bookings, checkinSessions, hotels, rooms } from './schema/index.js'
+import { db, pool } from './client.js'
+import { newSessionToken, tokenHash } from '../lib/crypto.js'
+
+/**
+ * Enough data to exercise the flow: one hotel, three reservations arriving
+ * today, and both kinds of QR.
+ *
+ *   desk QR    — printed on the counter card, long-lived, identifies the
+ *                property. Mints a short-lived child session per scan.
+ *   booking QR — what goes in a confirmation email. Knows its reservation, so
+ *                a first-time guest can finish without staff matching them.
+ */
+
+const today = new Date().toISOString().slice(0, 10)
+const inDays = (n) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10)
+
+const [hotel] = await db
+  .insert(hotels)
+  .values({
+    name: 'Hotel Aurora',
+    location: 'Bandra West, Mumbai',
+    timezone: 'Asia/Kolkata',
+    address: { line1: 'Linking Road', city: 'Mumbai', country: 'IN' },
+  })
+  .returning({ id: hotels.id })
+
+const bookingTokens = []
+
+for (const [ref, number, guestName] of [
+  ['AUR-4821', '305', 'Rahul Sharma'],
+  ['AUR-4822', '306', 'Rahul Sharma'],
+  ['AUR-4823', '412', 'Rahul Sharma'],
+]) {
+  const [room] = await db
+    .insert(rooms)
+    .values({ hotelId: hotel.id, number, roomType: 'Deluxe' })
+    .returning({ id: rooms.id })
+
+  const [booking] = await db
+    .insert(bookings)
+    .values({
+      hotelId: hotel.id,
+      bookingRef: ref,
+      guestName,
+      roomId: room.id,
+      arrivalDate: today,
+      departureDate: inDays(2),
+    })
+    .returning({ id: bookings.id })
+
+  const token = newSessionToken()
+  await db.insert(checkinSessions).values({
+    hotelId: hotel.id,
+    bookingId: booking.id,
+    tokenHash: tokenHash(token),
+    kind: 'booking',
+    expiresAt: new Date(Date.now() + 3 * 86_400_000),
+  })
+  bookingTokens.push([ref, token])
+}
+
+// The desk QR never expires on its own — it's revoked, or the card is
+// reprinted.
+const deskToken = newSessionToken()
+await db.insert(checkinSessions).values({
+  hotelId: hotel.id,
+  tokenHash: tokenHash(deskToken),
+  kind: 'desk',
+  expiresAt: new Date(Date.now() + 3650 * 86_400_000),
+})
+
+console.log('seeded Hotel Aurora · 3 reservations arriving today')
+console.log(`desk QR token : ${deskToken}`)
+for (const [ref, token] of bookingTokens) console.log(`booking ${ref}: ${token}`)
+await pool.end()
