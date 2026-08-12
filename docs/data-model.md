@@ -83,6 +83,10 @@ CREATE TABLE guests (
   phone_hash      bytea UNIQUE,
   email_enc       bytea,          -- envelope-encrypted, KMS-managed key
   phone_enc       bytea,
+  -- Filled in by the identity check, not at signup: a guest row exists from
+  -- the moment a reservation is matched, before any ID has been seen.
+  date_of_birth   date,
+  gender          text CHECK (gender IN ('female','male','other','undisclosed')),
   status          text NOT NULL DEFAULT 'active'
                   CHECK (status IN ('active','suspended','erased')),
   created_at      timestamptz NOT NULL DEFAULT now(),

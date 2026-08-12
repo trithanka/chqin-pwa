@@ -4,6 +4,7 @@ import {
   boolean,
   check,
   customType,
+  date,
   index,
   integer,
   pgTable,
@@ -44,13 +45,25 @@ export const guests = pgTable(
   phoneHmac: bytea('phone_hmac').unique(),
   emailEnc: bytea('email_enc'),
   phoneEnc: bytea('phone_enc'),
+  // Nullable: a guest exists from the moment a reservation is matched, which
+  // is before any ID has been seen. These are filled in by the identity check.
+  dateOfBirth: date('date_of_birth'),
+  // Free-ish, not a two-value enum: hotel registers ask for this, and the
+  // honest set of answers includes "other" and "would rather not say".
+  gender: text('gender'),
   status: text('status').notNull().default('active'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 },
   // Enumerations live in the database, not only in a comment: an unexpected
   // value should fail the write, not surface later as a journey nobody handles.
-  (table) => [check('guests_status', sql`${table.status} IN ('active','suspended','erased')`)],
+  (table) => [
+    check('guests_status', sql`${table.status} IN ('active','suspended','erased')`),
+    check(
+      'guests_gender',
+      sql`${table.gender} IS NULL OR ${table.gender} IN ('female','male','other','undisclosed')`,
+    ),
+  ],
 )
 
 /** One row per passkey. This table is the login system. */
