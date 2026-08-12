@@ -68,7 +68,7 @@ export default function OnboardingWizard({ onComplete }) {
     try {
       // The password is deliberately not part of the draft: a credential left
       // in localStorage outlives the tab, the session and the person.
-      const { password, confirmPassword, ...account } = data.account
+      const { password: _pw, confirmPassword: _confirm, ...account } = data.account
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify({ data: { ...data, account }, stepIndex, furthest }),
