@@ -1,33 +1,46 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight, Fingerprint, Mail } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import { Button, Field, Input, Panel } from '../components/ui'
+import PasswordField from '../components/PasswordField'
 import { useSession } from '../session'
 
 /**
- * Staff sign-in. No password field — same rule as the guest app: a passkey, or
- * a link to the address we already trust. Nothing to remember, nothing for us
- * to store, nothing to leak.
+ * Staff sign-in: email and password, set during registration.
+ *
+ * Prototype — there is no staff auth on the API yet, so any well-formed pair
+ * gets you in. When it lands, the only change here is what `submit` awaits.
  */
 export default function LoginPage() {
   const [email, setEmail] = useState('')
-  const [error, setError] = useState(null)
-  const [sent, setSent] = useState(false)
+  const [password, setPassword] = useState('')
+  const [errors, setErrors] = useState({})
+  const [busy, setBusy] = useState(false)
   const { signIn } = useSession()
   const navigate = useNavigate()
 
-  const enter = (name) => {
-    signIn({ name, email: email.trim() || 'priya@hotelaurora.com', role: 'owner' })
-    navigate('/app')
-  }
+  const submit = async (e) => {
+    e?.preventDefault()
 
-  const sendLink = () => {
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) {
-      setError('Use the work email your account was set up with.')
-      return
+    const next = {}
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) next.email = 'Enter your work email.'
+    if (!password) next.password = 'Enter your password.'
+    setErrors(next)
+    if (Object.keys(next).length) return
+
+    setBusy(true)
+    try {
+      // The real call returns 401 for both a wrong email and a wrong password,
+      // and says the same thing either way — telling an attacker which half
+      // was right turns a login form into an account-enumeration tool.
+      await new Promise((resolve) => setTimeout(resolve, 350))
+      signIn({ name: 'Priya Nair', email: email.trim(), role: 'owner' })
+      navigate('/app')
+    } catch {
+      setErrors({ form: "That email and password don't match." })
+    } finally {
+      setBusy(false)
     }
-    setError(null)
-    setSent(true)
   }
 
   return (
@@ -43,57 +56,45 @@ export default function LoginPage() {
         </>
       }
     >
-      {sent ? (
-        <div className="text-center">
-          <span className="mx-auto mb-4 grid size-12 place-items-center rounded-full bg-brand-soft text-brand">
-            <Mail size={22} strokeWidth={2} />
-          </span>
-          <p className="text-[15px] font-bold text-slate-900">Check your email</p>
-          <p className="mx-auto mt-1.5 max-w-[34ch] text-[13.5px] leading-relaxed text-slate-500">
-            We sent a sign-in link to <span className="font-semibold text-slate-700">{email}</span>.
-            It works once and expires in ten minutes.
+      <form className="flex flex-col gap-4" onSubmit={submit}>
+        {errors.form && (
+          <p className="rounded-lg bg-red-50 px-3 py-2.5 text-[13px] font-medium text-red-700">
+            {errors.form}
           </p>
+        )}
 
-          <div className="mt-7 border-t border-slate-100 pt-5">
-            <p className="mb-2.5 text-[12px] text-slate-400">
-              Prototype — no email is actually sent.
-            </p>
-            <Button tone="secondary" iconRight={ArrowRight} onClick={() => enter('Priya Nair')}>
-              Continue to the dashboard
-            </Button>
-          </div>
+        <Field label="Work email" error={errors.email}>
+          <Input
+            type="email"
+            value={email}
+            invalid={!!errors.email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="priya@hotelaurora.com"
+            autoComplete="email"
+          />
+        </Field>
+
+        <PasswordField
+          label="Password"
+          value={password}
+          onChange={setPassword}
+          error={errors.password}
+          autoComplete="current-password"
+        />
+
+        <div className="-mt-1 text-right">
+          <button
+            type="button"
+            className="text-[12.5px] font-semibold text-slate-500 hover:text-brand"
+          >
+            Forgot password?
+          </button>
         </div>
-      ) : (
-        <div className="flex flex-col gap-4">
-          <Button icon={Fingerprint} onClick={() => enter('Priya Nair')}>
-            Sign in with a passkey
-          </Button>
 
-          <div className="flex items-center gap-3 py-1">
-            <span className="h-px flex-1 bg-slate-200" />
-            <span className="text-[11.5px] font-semibold uppercase tracking-wider text-slate-400">
-              or
-            </span>
-            <span className="h-px flex-1 bg-slate-200" />
-          </div>
-
-          <Field label="Work email" error={error}>
-            <Input
-              type="email"
-              value={email}
-              invalid={!!error}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && sendLink()}
-              placeholder="priya@hotelaurora.com"
-              autoComplete="email"
-            />
-          </Field>
-
-          <Button tone="secondary" icon={Mail} onClick={sendLink}>
-            Email me a sign-in link
-          </Button>
-        </div>
-      )}
+        <Button type="submit" loading={busy} iconRight={ArrowRight}>
+          Sign in
+        </Button>
+      </form>
     </AuthShell>
   )
 }

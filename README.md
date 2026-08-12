@@ -305,8 +305,8 @@ decision, not a coding one, and is deliberately left open.
 
 | Route | What's there |
 | --- | --- |
-| `/` | Sign in — a passkey, or a link to a work email. No password field |
-| `/register` | Setting up a property *is* registering: the six-step onboarding |
+| `/` | Sign in — work email and password |
+| `/register` | Setting up a property *is* registering: the six-step onboarding, where the password is set |
 | `/app` | Today — arrivals, who's in, who's still coming |
 | `/app/bookings` | Every reservation, filterable, with a detail page per booking |
 | `/app/guests` | People who have checked in here, and what devices they hold |
@@ -330,8 +330,20 @@ moment in a lobby.
 
 Two decisions worth keeping when it gets wired up:
 
-**No password field.** Staff sign in with a passkey or an emailed link, so
-onboarding never creates a credential the product doesn't want to hold.
+**Staff sign in with email and password; guests never do.** The two sides of
+this product have different users and different threat models — a guest is a
+stranger with a phone, a staff member is a known person at a desk who may share
+a terminal. Rules in [lib/password.js](apps/dashboard/src/lib/password.js)
+follow NIST 800-63B: a length floor rather than composition rules, screened
+against known-bad passwords, no forced rotation. The password is set during
+registration and deliberately **not** written to the onboarding draft in
+localStorage — everything else in that draft survives a refresh, a credential
+shouldn't.
+
+What the API owes this when staff auth lands: argon2id hashing (never
+reversible, never logged), one identical error for a wrong email and a wrong
+password so the form can't be used to enumerate accounts, rate limiting with
+lockout, and a reset flow whose tokens are single-use and short-lived.
 
 **The room range builder is the primary control**, with single-room entry as
 the fallback. Nobody types eighty rooms one at a time, and the person doing

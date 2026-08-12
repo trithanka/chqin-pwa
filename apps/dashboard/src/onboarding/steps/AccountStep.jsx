@@ -1,10 +1,13 @@
 import { Field, Input, Select } from '../../components/ui'
+import PasswordField from '../../components/PasswordField'
 import StepHeader from '../../components/StepHeader'
+import { MIN_LENGTH } from '../../lib/password'
 
 /**
- * No password field. Staff will sign in with a passkey or an emailed link —
- * asking for a password here would create a credential the product doesn't
- * want to hold.
+ * The owner's account, and the password they'll sign in with.
+ *
+ * The password is set here and nowhere else — no emailed "set your password"
+ * round trip for the person who just typed their email two fields ago.
  */
 export default function AccountStep({ data, patch, errors }) {
   const set = (key, value) => patch('account', { ...data.account, [key]: value })
@@ -28,12 +31,7 @@ export default function AccountStep({ data, patch, errors }) {
           />
         </Field>
 
-        <Field
-          label="Work email"
-          required
-          error={errors.email}
-          hint="We'll send your sign-in link here. No password to remember."
-        >
+        <Field label="Work email" required error={errors.email} hint="This is what you'll sign in with.">
           <Input
             type="email"
             value={data.account.email}
@@ -43,6 +41,22 @@ export default function AccountStep({ data, patch, errors }) {
             autoComplete="email"
           />
         </Field>
+
+        <PasswordField
+          label="Password"
+          value={data.account.password}
+          onChange={(value) => set('password', value)}
+          error={errors.password}
+          hint={`At least ${MIN_LENGTH} characters. A few words you'll remember beats a short one with symbols.`}
+          meter
+        />
+
+        <PasswordField
+          label="Confirm password"
+          value={data.account.confirmPassword}
+          onChange={(value) => set('confirmPassword', value)}
+          error={errors.confirmPassword}
+        />
 
         <Field label="Your role" hint="Sets what you can change. Everyone can run check-ins.">
           <Select value={data.account.role} onChange={(e) => set('role', e.target.value)}>

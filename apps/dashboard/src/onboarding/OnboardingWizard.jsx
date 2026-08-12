@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { Button, StepRail } from '../components/ui'
+import { passwordProblem } from '../lib/password'
 import AccountStep from './steps/AccountStep'
 import PropertyStep from './steps/PropertyStep'
 import RoomsStep from './steps/RoomsStep'
@@ -27,7 +28,7 @@ const STEPS = [
 ]
 
 const BLANK = {
-  account: { name: '', email: '', role: 'owner' },
+  account: { name: '', email: '', password: '', confirmPassword: '', role: 'owner' },
   property: { name: '', city: '', address: '', country: 'IN', timezone: 'Asia/Kolkata' },
   rooms: [],
   team: [],
@@ -44,7 +45,7 @@ const loadDraft = () => {
     // already filled in reads as a bug, not a feature.
     const furthest = Math.min(saved.furthest ?? 0, STEPS.length - 1)
     return {
-      data: { ...BLANK, ...saved.data },
+      data: { ...BLANK, ...saved.data, account: { ...BLANK.account, ...saved.data?.account } },
       stepIndex: Math.min(saved.stepIndex ?? 0, furthest),
       furthest,
     }
@@ -65,7 +66,13 @@ export default function OnboardingWizard({ onComplete }) {
   // With no backend, the draft lives in this browser only.
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ data, stepIndex, furthest }))
+      // The password is deliberately not part of the draft: a credential left
+      // in localStorage outlives the tab, the session and the person.
+      const { password, confirmPassword, ...account } = data.account
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ data: { ...data, account }, stepIndex, furthest }),
+      )
     } catch {
       /* private mode — the draft just won't survive a refresh */
     }
@@ -195,9 +202,13 @@ function validate(stepKey, data) {
   const errors = {}
 
   if (stepKey === 'account') {
-    if (!data.account.name.trim()) errors.name = 'Tell us who you are.'
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(data.account.email))
-      errors.email = 'Use a work email address.'
+    const { name, email, password, confirmPassword } = data.account
+    if (!name.trim()) errors.name = 'Tell us who you are.'
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) errors.email = 'Use a work email address.'
+
+    const problem = passwordProblem(password, { email })
+    if (problem) errors.password = problem
+    else if (confirmPassword !== password) errors.confirmPassword = "These don't match."
   }
 
   if (stepKey === 'property') {
