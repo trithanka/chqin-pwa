@@ -37,7 +37,7 @@ webauthn.post('/registration/verify', body(registrationVerifyRequest), async (c)
     await logEvent(c, {
       guestId: result.guestId,
       credentialId: result.credentialId,
-      hotelId: session.hotelId,
+      venueId: session.venueId,
       sessionId: session.id,
       event: 'register',
       outcome: 'ok',
@@ -45,7 +45,7 @@ webauthn.post('/registration/verify', body(registrationVerifyRequest), async (c)
     return c.json(result)
   } catch (err) {
     await logEvent(c, {
-      hotelId: session.hotelId,
+      venueId: session.venueId,
       sessionId: session.id,
       event: 'register',
       outcome: 'failed',
@@ -69,7 +69,7 @@ webauthn.post('/authentication/verify', body(authenticationVerifyRequest), async
     await logEvent(c, {
       guestId: result.guestId,
       credentialId: result.credentialId,
-      hotelId: session.hotelId,
+      venueId: session.venueId,
       sessionId: session.id,
       event: 'assert',
       outcome: 'ok',
@@ -78,7 +78,7 @@ webauthn.post('/authentication/verify', body(authenticationVerifyRequest), async
   } catch (err) {
     await logEvent(c, {
       credentialId: data.credential.id,
-      hotelId: session.hotelId,
+      venueId: session.venueId,
       sessionId: session.id,
       event: 'assert',
       outcome: 'failed',

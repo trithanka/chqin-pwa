@@ -6,7 +6,7 @@
  * data model depends on is visible in the file tree:
  *
  *   identity.js — guests, credentials, KYC events   (global)
- *   property.js — hotels, rooms, bookings, sessions (tenanted by hotel)
+ *   property.js — venues, rooms, bookings, sessions (tenanted by venue)
  *   checkin.js  — the join between them
  *   auth.js     — challenges and the audit log
  */

@@ -118,7 +118,7 @@ indicator once it's running standalone.
 | ChqIn Identity | server (simulated: `chqin.identities`) | The guest's persistent identity. Survives losing a phone. |
 | Passkey | the device's secure enclave; `chqin.device.credentials` holds only a local hint | One credential per device. ChqIn stores the credential ID and public key, never the private key. |
 | Device unlock (Face ID, Touch ID, fingerprint) | the phone OS | Releases the passkey. ChqIn never sees biometric data. |
-| QR | the hotel | Identifies the hotel and the check-in session, including the booking. |
+| QR | the venue | Identifies the venue and the check-in session, including the booking. |
 
 No password, and no OTP on a normal returning check-in.
 
@@ -204,6 +204,12 @@ Brand `#2563EB`, success `#16A34A`, canvas `#F8FAFC`.
 # chqin-pwa
 
 ## Database
+
+**A "venue" is anywhere someone arrives** — a hotel today, an apartment block,
+a temple or a station later. The schema says `venues` with a `kind` rather than
+`hotels`, because that rename is cheap with one property on the system and a
+coordinated migration once there are hundreds. What isn't generalised yet is
+how entry is granted; see [docs/data-model.md](docs/data-model.md).
 
 **Drizzle is the source of truth.** The schema lives in
 [apps/api/src/db/schema/](apps/api/src/db/schema/), split by domain so the

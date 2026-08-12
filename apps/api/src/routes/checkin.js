@@ -24,7 +24,7 @@ checkin.post('/', body(checkinRequest), async (c) => {
     return c.json({
       checkinId: existing.id,
       journey: existing.journey,
-      hotelName: session.hotelName,
+      venueName: session.venueName,
       roomNumber: existing.roomNumber ?? session.roomNumber,
       checkedInAt: existing.checkedInAt.toISOString(),
     })
@@ -34,7 +34,7 @@ checkin.post('/', body(checkinRequest), async (c) => {
 
   await logEvent(c, {
     guestId: session.guestId,
-    hotelId: session.hotelId,
+    venueId: session.venueId,
     sessionId: session.id,
     event: 'checkin',
     outcome: 'ok',

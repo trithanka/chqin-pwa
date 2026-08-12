@@ -10,7 +10,7 @@ shouldn't be conflated with one:
 
 | Store | Holds | Why not Postgres |
 | --- | --- | --- |
-| **PostgreSQL** | Guests, credentials, hotels, bookings, sessions, check-ins, audit | — |
+| **PostgreSQL** | Guests, credentials, venues, bookings, sessions, check-ins, audit | — |
 | **Redis** | WebAuthn challenges, QR session tokens, rate-limit counters | Write-once, read-once, expires in 60s. Native TTL, no vacuum pressure, no table bloat. |
 | **Object storage** (S3 / R2) | ID document images, if you keep them at all | Blobs don't belong in a row. Server-side encryption, lifecycle-expiry, and the DB stores only a pointer + hash. |
 
@@ -29,6 +29,45 @@ identity domain separable from the stay domain, partitioning the two tables
 that grow unboundedly, and making the hot path a single indexed lookup. All
 three are schema decisions you make now and can't retrofit cheaply.
 
+## Beyond hotels
+
+The product starts at hotels and is meant to reach anywhere someone arrives —
+apartment blocks, temples, stations. The identity domain already generalises
+without a change: a ChqIn Identity has nothing hotel-shaped in it.
+
+The venue domain is where the assumptions live, so `hotels` is `venues` with a
+`kind` from day one. What doesn't generalise yet is **how entry is granted**,
+and there are three shapes:
+
+| Pattern | Where | What grants entry |
+| --- | --- | --- |
+| Reservation-led | Hotel, railway, event, apartment guest | A prior record naming an expected person |
+| Membership-led | Apartment resident, office, gym | A standing right, no per-visit record |
+| Open | Temple, museum, public building | Nothing prior — arrival is the event |
+
+Today only the first is modelled, in its hotel dialect: `bookings`, and a
+`checkins.booking_id` that is NOT NULL. Generalising means `checkins` pointing
+at a nullable *entitlement* — a booking, a membership, a ticket, or nothing —
+with kind-specific detail in a satellite table rather than forty nullable
+columns. **Don't build that until the second vertical is real**; the shape of
+"temple entry" is obvious after one conversation and speculative before it.
+
+Two things to decide before that day rather than after:
+
+**Volume changes by orders of magnitude.** A large hotel chain is ~1M
+check-ins/day. A national rail network is tens of millions, arriving in
+90-second spikes at a gate rather than over an afternoon. That is where the
+identity/venue split stops being tidiness and becomes two deployments.
+
+**Open venues are a surveillance question, not just a schema one.** Hotels are
+legally required to identify guests, which is why the identity check exists. A
+temple is not — and a database recording which identified person entered which
+temple on which day is a movement-tracking system regardless of intent. Entry
+at open venues should be able to work without writing an identity-linked row at
+all: capacity counting, or a pseudonymous token. `checkins.guest_id` is already
+nullable; retention rules per venue kind are the other half, and both are far
+easier to build in now than to retrofit under scrutiny.
+
 ## The one structural decision that matters
 
 **Guests are global. Stays are per-property.**
@@ -40,7 +79,7 @@ retention rules, and different regulators.
 
 Keep them cleanly separated from day one — no foreign keys from the identity
 tables *into* property tables, and every property-scoped table carrying
-`hotel_id` — and the day you split them into two services or two clusters is
+`venue_id` — and the day you split them into two services or two clusters is
 a deployment change, not a rewrite. Blur them (e.g. hanging credentials off a
 booking) and you've built a per-hotel login system, which is the thing ChqIn
 exists not to be.
@@ -142,9 +181,11 @@ CREATE TABLE identity_verifications (
 ### Property domain
 
 ```sql
-CREATE TABLE hotels (
+CREATE TABLE venues (
   id          uuid PRIMARY KEY DEFAULT uuid_v7(),
-  chain_id    uuid,
+  operator_id uuid,                        -- chain, housing society, trust
+  kind        text NOT NULL DEFAULT 'hotel'
+              CHECK (kind IN ('hotel','apartment','temple','station','office','other')),
   name        text NOT NULL,
   timezone    text NOT NULL,               -- check-in cutoffs are local time
   address     jsonb NOT NULL,
@@ -153,15 +194,15 @@ CREATE TABLE hotels (
 
 CREATE TABLE rooms (
   id          uuid PRIMARY KEY DEFAULT uuid_v7(),
-  hotel_id    uuid NOT NULL REFERENCES hotels(id),
+  venue_id    uuid NOT NULL REFERENCES venues(id),
   number      text NOT NULL,
   room_type   text,
-  UNIQUE (hotel_id, number)
+  UNIQUE (venue_id, number)
 );
 
 CREATE TABLE bookings (
   id              uuid PRIMARY KEY DEFAULT uuid_v7(),
-  hotel_id        uuid NOT NULL REFERENCES hotels(id),
+  venue_id        uuid NOT NULL REFERENCES venues(id),
   booking_ref     text NOT NULL,           -- what the PMS calls it
   pms_ref         text,
   guest_name      text NOT NULL,           -- as booked; may not match identity
@@ -172,10 +213,10 @@ CREATE TABLE bookings (
   status          text NOT NULL
                   CHECK (status IN ('confirmed','checked_in','checked_out','cancelled')),
   created_at      timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (hotel_id, booking_ref)
+  UNIQUE (venue_id, booking_ref)
 );
 
-CREATE INDEX bookings_arrivals ON bookings (hotel_id, arrival_date)
+CREATE INDEX bookings_arrivals ON bookings (venue_id, arrival_date)
   WHERE status = 'confirmed';
 ```
 
@@ -187,7 +228,7 @@ recovery step.
 -- What a QR code resolves to. Short-lived, single-use, never guessable.
 CREATE TABLE checkin_sessions (
   id              uuid PRIMARY KEY DEFAULT uuid_v7(),
-  hotel_id        uuid NOT NULL REFERENCES hotels(id),
+  venue_id        uuid NOT NULL REFERENCES venues(id),
   booking_id      uuid REFERENCES bookings(id),  -- NULL for a desk/lobby QR
   token_hash      bytea NOT NULL,          -- hash, so a DB leak isn't a key ring
   kind            text NOT NULL CHECK (kind IN ('desk','booking','kiosk')),
@@ -199,7 +240,7 @@ CREATE TABLE checkin_sessions (
 );
 
 CREATE UNIQUE INDEX checkin_sessions_token ON checkin_sessions (token_hash);
-CREATE INDEX checkin_sessions_open ON checkin_sessions (hotel_id, expires_at)
+CREATE INDEX checkin_sessions_open ON checkin_sessions (venue_id, expires_at)
   WHERE status = 'open';
 ```
 
@@ -213,7 +254,7 @@ reprinting cards and not.
 ```sql
 CREATE TABLE checkins (
   id              uuid PRIMARY KEY DEFAULT uuid_v7(),
-  hotel_id        uuid NOT NULL REFERENCES hotels(id),
+  venue_id        uuid NOT NULL REFERENCES venues(id),
   booking_id      uuid NOT NULL REFERENCES bookings(id),
   guest_id        uuid NOT NULL REFERENCES guests(id),
   session_id      uuid REFERENCES checkin_sessions(id),
@@ -234,7 +275,7 @@ CREATE TABLE auth_events (
   occurred_at     timestamptz NOT NULL DEFAULT now(),
   guest_id        uuid,
   credential_id   uuid,
-  hotel_id        uuid,
+  venue_id        uuid,
   event           text NOT NULL,     -- 'register','assert','assert_failed','revoke'
   outcome         text NOT NULL,
   detail          jsonb,
@@ -274,7 +315,7 @@ highest-write table the one full of rows that die in two minutes.
 Stage 5 is the one the schema above buys you. If identity and stay are already
 FK-free across the boundary, it's a migration; if not, it's a rewrite.
 
-Two partitioning notes for stage 6: shard property data on `hotel_id` (never on
+Two partitioning notes for stage 6: shard property data on `venue_id` (never on
 `guest_id` — a guest legitimately appears in many properties), and expect
 `guests` to be the small, hot, globally-replicated table. That asymmetry is
 normal and fine: identity is small and read-mostly, stays are large and

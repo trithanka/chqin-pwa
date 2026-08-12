@@ -11,7 +11,7 @@ export function logEvent(c, fields) {
     .values({
       guestId: fields.guestId ?? null,
       credentialId: fields.credentialId ?? null,
-      hotelId: fields.hotelId ?? null,
+      venueId: fields.venueId ?? null,
       sessionId: fields.sessionId ?? null,
       event: fields.event,
       outcome: fields.outcome,

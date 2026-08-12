@@ -52,7 +52,7 @@ export async function checkIn(session, idempotencyKey) {
     const [row] = await tx
       .insert(checkins)
       .values({
-        hotelId: session.hotelId,
+        venueId: session.venueId,
         bookingId: session.bookingId,
         guestId: session.guestId,
         sessionId: session.id,
@@ -83,17 +83,17 @@ export async function checkIn(session, idempotencyKey) {
   return {
     checkinId: result.id,
     journey,
-    hotelName: session.hotelName,
+    venueName: session.venueName,
     roomNumber: session.roomNumber,
     checkedInAt: result.checkedInAt.toISOString(),
   }
 }
 
 /** Today's arrivals — the dashboard's first real screen. */
-export const recentCheckins = (hotelId, limit = 50) =>
+export const recentCheckins = (venueId, limit = 50) =>
   db
     .select()
     .from(checkins)
-    .where(eq(checkins.hotelId, hotelId))
+    .where(eq(checkins.venueId, venueId))
     .orderBy(desc(checkins.checkedInAt))
     .limit(limit)

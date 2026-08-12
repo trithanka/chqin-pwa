@@ -50,7 +50,7 @@ export const authEvents = pgTable(
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
     guestId: uuid('guest_id'),
     credentialId: text('credential_id'),
-    hotelId: uuid('hotel_id'),
+    venueId: uuid('venue_id'),
     sessionId: uuid('session_id'),
     event: text('event').notNull(),
     outcome: text('outcome').notNull(), // ok | failed

@@ -20,6 +20,14 @@ import { z } from 'zod'
 export const JOURNEYS = ['returning', 'newDevice', 'firstTime']
 export const journeySchema = z.enum(JOURNEYS)
 
+/**
+ * Where a check-in can happen. Entry is reservation-led at a hotel,
+ * membership-led at an apartment, and open at a temple — the kind is what
+ * tells both sides which of those rules apply.
+ */
+export const VENUE_KINDS = ['hotel', 'apartment', 'temple', 'station', 'office', 'other']
+export const venueKindSchema = z.enum(VENUE_KINDS)
+
 /* ------------------------------------------------------------------ */
 /* Sessions — what a scanned QR resolves to                            */
 /* ------------------------------------------------------------------ */
@@ -31,8 +39,12 @@ export const sessionTokenSchema = z.string().min(16).max(128)
  *  guest identity leaks before anyone has authenticated. */
 export const sessionSchema = z.object({
   sessionId: z.uuid(),
-  hotel: z.object({
+  // A venue is anywhere someone arrives — a hotel today, an apartment block,
+  // a temple or a station later. `kind` is what tells the client which arrival
+  // rules apply.
+  venue: z.object({
     name: z.string(),
+    kind: z.enum(VENUE_KINDS),
     location: z.string().nullable(),
   }),
   booking: z
@@ -130,7 +142,7 @@ export const checkinRequest = z.object({
 export const checkinResponse = z.object({
   checkinId: z.uuid(),
   journey: journeySchema,
-  hotelName: z.string(),
+  venueName: z.string(),
   roomNumber: z.string().nullable(),
   checkedInAt: z.string(),
 })

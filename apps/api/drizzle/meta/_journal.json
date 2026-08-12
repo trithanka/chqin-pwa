@@ -22,6 +22,13 @@
       "when": 1786555826780,
       "tag": "0002_guest_dob_gender",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786556752414,
+      "tag": "0003_hotels_to_venues",
+      "breakpoints": true
     }
   ]
 }

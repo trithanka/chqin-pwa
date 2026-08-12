@@ -1,7 +1,7 @@
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { config } from '../config.js'
 import { db } from '../db/client.js'
-import { bookings, checkinSessions, hotels, rooms } from '../db/schema/index.js'
+import { bookings, checkinSessions, venues, rooms } from '../db/schema/index.js'
 import { newSessionToken, tokenHash } from '../lib/crypto.js'
 import { conflict, notFound } from '../lib/errors.js'
 
@@ -15,14 +15,15 @@ export async function loadAny(sessionId) {
   const [row] = await db
     .select({
       id: checkinSessions.id,
-      hotelId: checkinSessions.hotelId,
+      venueId: checkinSessions.venueId,
       bookingId: checkinSessions.bookingId,
       guestId: checkinSessions.guestId,
       status: checkinSessions.status,
       journey: checkinSessions.journey,
       expiresAt: checkinSessions.expiresAt,
-      hotelName: hotels.name,
-      hotelLocation: hotels.location,
+      venueName: venues.name,
+      venueKind: venues.kind,
+      venueLocation: venues.location,
       bookingRef: bookings.bookingRef,
       bookingGuestName: bookings.guestName,
       bookingGuestId: bookings.guestId,
@@ -31,7 +32,7 @@ export async function loadAny(sessionId) {
       roomNumber: rooms.number,
     })
     .from(checkinSessions)
-    .innerJoin(hotels, eq(hotels.id, checkinSessions.hotelId))
+    .innerJoin(venues, eq(venues.id, checkinSessions.venueId))
     .leftJoin(bookings, eq(bookings.id, checkinSessions.bookingId))
     .leftJoin(rooms, eq(rooms.id, bookings.roomId))
     .where(eq(checkinSessions.id, sessionId))
@@ -57,7 +58,7 @@ export async function requireOpen(sessionId) {
 
 export const toPayload = (s) => ({
   sessionId: s.id,
-  hotel: { name: s.hotelName, location: s.hotelLocation },
+  venue: { name: s.venueName, kind: s.venueKind, location: s.venueLocation },
   booking: s.bookingId
     ? {
         reference: s.bookingRef,
@@ -95,7 +96,7 @@ export async function resolveToken(token) {
   const [child] = await db
     .insert(checkinSessions)
     .values({
-      hotelId: parent.hotelId,
+      venueId: parent.venueId,
       bookingId: parent.bookingId,
       parentId: parent.id,
       tokenHash: tokenHash(newSessionToken()),
@@ -125,7 +126,7 @@ export async function attachBooking(tx, session, guestId) {
     .from(bookings)
     .where(
       and(
-        eq(bookings.hotelId, session.hotelId),
+        eq(bookings.venueId, session.venueId),
         eq(bookings.guestId, guestId),
         eq(bookings.status, 'confirmed'),
         sql`${bookings.arrivalDate} = CURRENT_DATE`,

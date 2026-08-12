@@ -33,7 +33,7 @@ identity.post('/verifications', body(request), async (c) => {
     .returning({ id: identityVerifications.id })
 
   await logEvent(c, {
-    hotelId: session.hotelId,
+    venueId: session.venueId,
     sessionId: session.id,
     event: 'identity_verified',
     outcome: 'ok',

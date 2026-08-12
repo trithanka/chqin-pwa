@@ -1,4 +1,4 @@
-import { bookings, checkinSessions, hotels, rooms } from './schema/index.js'
+import { bookings, checkinSessions, venues, rooms } from './schema/index.js'
 import { db, pool } from './client.js'
 import { newSessionToken, tokenHash } from '../lib/crypto.js'
 
@@ -15,15 +15,16 @@ import { newSessionToken, tokenHash } from '../lib/crypto.js'
 const today = new Date().toISOString().slice(0, 10)
 const inDays = (n) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10)
 
-const [hotel] = await db
-  .insert(hotels)
+const [venue] = await db
+  .insert(venues)
   .values({
     name: 'Hotel Aurora',
+    kind: 'hotel',
     location: 'Bandra West, Mumbai',
     timezone: 'Asia/Kolkata',
     address: { line1: 'Linking Road', city: 'Mumbai', country: 'IN' },
   })
-  .returning({ id: hotels.id })
+  .returning({ id: venues.id })
 
 const bookingTokens = []
 
@@ -34,13 +35,13 @@ for (const [ref, number, guestName] of [
 ]) {
   const [room] = await db
     .insert(rooms)
-    .values({ hotelId: hotel.id, number, roomType: 'Deluxe' })
+    .values({ venueId: venue.id, number, roomType: 'Deluxe' })
     .returning({ id: rooms.id })
 
   const [booking] = await db
     .insert(bookings)
     .values({
-      hotelId: hotel.id,
+      venueId: venue.id,
       bookingRef: ref,
       guestName,
       roomId: room.id,
@@ -51,7 +52,7 @@ for (const [ref, number, guestName] of [
 
   const token = newSessionToken()
   await db.insert(checkinSessions).values({
-    hotelId: hotel.id,
+    venueId: venue.id,
     bookingId: booking.id,
     tokenHash: tokenHash(token),
     kind: 'booking',
@@ -64,7 +65,7 @@ for (const [ref, number, guestName] of [
 // reprinted.
 const deskToken = newSessionToken()
 await db.insert(checkinSessions).values({
-  hotelId: hotel.id,
+  venueId: venue.id,
   tokenHash: tokenHash(deskToken),
   kind: 'desk',
   expiresAt: new Date(Date.now() + 3650 * 86_400_000),
