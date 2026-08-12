@@ -237,8 +237,42 @@ npm run db:generate  # schema change → a migration file
 npm run db:migrate   # apply pending migrations (this is what production runs)
 npm run db:push      # sync the DB directly, skipping the migration file
 npm run db:studio    # browse the data
-npm run db:reset     # drop, migrate, seed — development only
+npm run db:seed      # a venue, 3 reservations, QR tokens
+npm run db:reseed    # clear the data and seed again (keeps the schema)
+npm run db:reset     # drop schemas, migrate, seed — refuses anything not localhost
 ```
+
+### Hosted Postgres
+
+`DATABASE_URL` can point anywhere; [.env.example](apps/api/.env.example) shows
+both shapes. Four things a hosted database needs that a local container
+doesn't, all handled in [config.js](apps/api/src/config.js) and
+[db/client.js](apps/api/src/db/client.js):
+
+**Two connections, not one.** App traffic goes through the transaction pooler
+(Supabase: port 6543); migrations go through the session pooler (5432) via
+`DIRECT_URL`. Transaction pooling breaks anything that spans statements —
+advisory locks, session settings — which is exactly what a migration runner
+does.
+
+**A verified TLS chain.** Supabase signs its pooler certificates with its own
+root, which isn't in Node's trust store, so
+[certs/supabase-ca.crt](apps/api/certs/supabase-ca.crt) is pinned and
+`rejectUnauthorized` stays on. Turning verification off would encrypt the
+connection while accepting any certificate — the half of TLS that stops
+nobody.
+
+**No `sslmode` in the URL.** node-postgres lets it override the `ssl` object
+passed alongside, silently discarding the pinned CA and failing with
+`SELF_SIGNED_CERT_IN_CHAIN`. The parameter is stripped when config is parsed.
+
+**A smaller pool.** Behind a pooler every local client is a pooler slot, and
+shared tiers count them tightly — a big pool starves other clients rather than
+making anything faster.
+
+**Percent-encode the password.** A literal `@` or `#` makes the URL parser read
+the rest as the hostname, and the error you get is a DNS failure that says
+nothing about passwords.
 
 `db:push` is for iterating locally. Once a schema is deployed, generate a
 migration and apply it: push works out the diff itself, and on a database with

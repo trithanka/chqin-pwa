@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm'
+import { config, isRemote } from '../config.js'
 import { db, pool } from './client.js'
 
 /**
@@ -8,8 +9,11 @@ import { db, pool } from './client.js'
  * `public` alone leaves the bookkeeping behind and the next migrate reports
  * "up to date" against an empty database. Both have to go.
  */
-if (process.env.NODE_ENV === 'production') {
-  console.error('Refusing to reset a production database.')
+// NODE_ENV is a promise; the host name is a fact. This script drops schemas,
+// so it only ever runs against a Postgres on this machine.
+if (process.env.NODE_ENV === 'production' || isRemote()) {
+  console.error('Refusing to reset a database that is not local.')
+  console.error(`DATABASE_URL points at ${new URL(config.DATABASE_URL).host}.`)
   process.exit(1)
 }
 

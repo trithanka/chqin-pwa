@@ -15,7 +15,8 @@ export default defineConfig({
   out: './drizzle',
   // The same config the server uses — a second hardcoded fallback here is how
   // `db:push` ends up pointed at a different database than the app.
-  dbCredentials: { url: config.DATABASE_URL },
+  // Session mode for schema work, same as the migration runner.
+  dbCredentials: { url: config.DIRECT_URL ?? config.DATABASE_URL },
   verbose: true,
   strict: true,
 })

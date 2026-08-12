@@ -22,7 +22,9 @@
     "db:push": "npm run db:push --workspace @chqin/api",
     "db:studio": "npm run db:studio --workspace @chqin/api",
     "db:seed": "npm run db:seed --workspace @chqin/api",
-    "db:reset": "npm run db:reset --workspace @chqin/api"
+    "db:reset": "npm run db:reset --workspace @chqin/api",
+    "db:clear": "npm run db:clear --workspace @chqin/api",
+    "db:reseed": "npm run db:reseed --workspace @chqin/api"
   },
   "devDependencies": {
     "concurrently": "^10.0.4",

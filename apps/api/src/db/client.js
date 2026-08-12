@@ -1,6 +1,6 @@
 import pg from 'pg'
 import { drizzle } from 'drizzle-orm/node-postgres'
-import { config } from '../config.js'
+import { config, isRemote, sslFor } from '../config.js'
 import * as schema from './schema/index.js'
 
 /**
@@ -10,9 +10,13 @@ import * as schema from './schema/index.js'
  */
 export const pool = new pg.Pool({
   connectionString: config.DATABASE_URL,
-  max: config.PG_POOL_MAX,
+  // Behind a transaction pooler every client here is a pooler slot, and the
+  // shared tiers count them tightly — a big local pool starves other clients
+  // rather than making anything faster.
+  max: isRemote() ? Math.min(config.PG_POOL_MAX, 5) : config.PG_POOL_MAX,
+  ssl: sslFor(config.DATABASE_URL),
   idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 5_000,
+  connectionTimeoutMillis: 10_000,
 })
 
 export const db = drizzle(pool, { schema })
