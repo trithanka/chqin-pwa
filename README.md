@@ -222,6 +222,15 @@ npm run db:reset     # drop, migrate, seed — development only
 migration and apply it: push works out the diff itself, and on a database with
 real guests in it that is a guess you don't want to take.
 
+Enumerated columns carry real `CHECK` constraints, not just a comment listing
+the values — an unexpected journey or status should fail the write rather than
+surface later as a state nothing handles.
+
+`.env` is loaded by [config.js](apps/api/src/config.js), which every entry
+point imports, `drizzle.config.js` included. Without that, a staging
+`DATABASE_URL` in `.env` would be ignored and `db:push` would quietly hit the
+local container instead.
+
 Two things Drizzle can't express, and how they're handled:
 
 **uuidv7 is generated in Node** ([lib/ids.js](apps/api/src/lib/ids.js)) rather

@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 import { credentials, guests } from './identity.js'
 import { bookings, checkinSessions, hotels, rooms } from './property.js'
 import { uuidv7 } from '../../lib/ids.js'
@@ -36,5 +36,6 @@ export const checkins = pgTable(
       .on(table.bookingId, table.idempotencyKey)
       .where(sql`idempotency_key IS NOT NULL`),
     index('checkins_hotel_day').on(table.hotelId, table.checkedInAt),
+    check('checkins_journey', sql`${table.journey} IN ('returning','newDevice','firstTime','desk')`),
   ],
 )

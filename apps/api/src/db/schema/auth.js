@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { index, inet, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { check, index, inet, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { guests } from './identity.js'
 import { checkinSessions } from './property.js'
 import { uuidv7 } from '../../lib/ids.js'
@@ -29,6 +29,7 @@ export const webauthnChallenges = pgTable(
     index('webauthn_challenges_expiry')
       .on(table.expiresAt)
       .where(sql`consumed_at IS NULL`),
+    check('webauthn_challenges_purpose', sql`${table.purpose} IN ('registration','authentication')`),
   ],
 )
 
@@ -57,5 +58,8 @@ export const authEvents = pgTable(
     ip: inet('ip'),
     userAgent: text('user_agent'),
   },
-  (table) => [index('auth_events_guest').on(table.guestId, table.occurredAt)],
+  (table) => [
+    index('auth_events_guest').on(table.guestId, table.occurredAt),
+    check('auth_events_outcome', sql`${table.outcome} IN ('ok','failed')`),
+  ],
 )

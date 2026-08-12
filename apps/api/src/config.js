@@ -1,5 +1,14 @@
 import { z } from 'zod'
 
+// Load .env before anything reads process.env. Every entry point — the server,
+// the migration scripts, and drizzle.config.js — comes through this module, so
+// this is the one place it has to happen.
+try {
+  process.loadEnvFile()
+} catch {
+  /* no .env file: the defaults below apply */
+}
+
 /**
  * Env, parsed once at boot. A missing RP ID or a typo'd origin should stop the
  * process here, not surface as a failed ceremony in a lobby.

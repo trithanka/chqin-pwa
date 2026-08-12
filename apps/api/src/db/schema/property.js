@@ -1,5 +1,6 @@
 import { relations, sql } from 'drizzle-orm'
 import {
+  check,
   date,
   index,
   jsonb,
@@ -70,6 +71,7 @@ export const bookings = pgTable(
       .on(table.hotelId, table.arrivalDate)
       .where(sql`status = 'confirmed'`),
     index('bookings_guest').on(table.guestId).where(sql`guest_id IS NOT NULL`),
+    check('bookings_status', sql`${table.status} IN ('confirmed','checked_in','checked_out','cancelled')`),
   ],
 )
 
@@ -86,7 +88,8 @@ export const checkinSessions = pgTable(
       .notNull()
       .references(() => hotels.id, { onDelete: 'cascade' }),
     bookingId: uuid('booking_id').references(() => bookings.id),
-    parentId: uuid('parent_id'),
+    // A desk QR is the parent of every session it mints.
+    parentId: uuid('parent_id').references(() => checkinSessions.id),
     // Hashed, so a database leak isn't a ring of working keys.
     tokenHash: bytea('token_hash').notNull(),
     kind: text('kind').notNull(), // desk | booking | kiosk
@@ -104,6 +107,12 @@ export const checkinSessions = pgTable(
     index('checkin_sessions_open')
       .on(table.hotelId, table.expiresAt)
       .where(sql`status = 'open'`),
+    check('checkin_sessions_kind', sql`${table.kind} IN ('desk','booking','kiosk')`),
+    check('checkin_sessions_status', sql`${table.status} IN ('open','consumed','expired','revoked')`),
+    check(
+      'checkin_sessions_journey',
+      sql`${table.journey} IS NULL OR ${table.journey} IN ('returning','newDevice','firstTime','desk')`,
+    ),
   ],
 )
 

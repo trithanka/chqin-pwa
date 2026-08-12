@@ -1,4 +1,5 @@
 import { defineConfig } from 'drizzle-kit'
+import { config } from './src/config.js'
 
 /**
  * The schema files are the source of truth; SQL under drizzle/ is generated.
@@ -12,9 +13,9 @@ export default defineConfig({
   dialect: 'postgresql',
   schema: './src/db/schema/index.js',
   out: './drizzle',
-  dbCredentials: {
-    url: process.env.DATABASE_URL ?? 'postgres://chqin:chqin@localhost:5439/chqin',
-  },
+  // The same config the server uses — a second hardcoded fallback here is how
+  // `db:push` ends up pointed at a different database than the app.
+  dbCredentials: { url: config.DATABASE_URL },
   verbose: true,
   strict: true,
 })

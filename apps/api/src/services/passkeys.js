@@ -145,13 +145,20 @@ export function finishRegistration(session, { challengeId, credential, deviceLab
   return transaction(async (tx) => {
     const challenge = await consumeChallenge(tx, challengeId, 'registration', session.id)
 
-    const verification = await verifyRegistrationResponse({
-      response: credential,
-      expectedChallenge: challenge.challenge,
-      expectedOrigin: config.ORIGINS,
-      expectedRPID: config.RP_ID,
-      requireUserVerification: true,
-    })
+    // A malformed response is the client's problem, not a server fault:
+    // SimpleWebAuthn throws plain Errors, which would surface as a 500.
+    let verification
+    try {
+      verification = await verifyRegistrationResponse({
+        response: credential,
+        expectedChallenge: challenge.challenge,
+        expectedOrigin: config.ORIGINS,
+        expectedRPID: config.RP_ID,
+        requireUserVerification: true,
+      })
+    } catch (err) {
+      throw new ApiError('unverified', `Passkey could not be verified: ${err.message}`, 400)
+    }
     if (!verification.verified) {
       throw new ApiError('unverified', 'Passkey could not be verified.', 400)
     }
@@ -237,19 +244,24 @@ export function finishAuthentication(session, { challengeId, credential }) {
       throw unauthorized('unknown_credential', 'This device is not recognised.')
     }
 
-    const verification = await verifyAuthenticationResponse({
-      response: credential,
-      expectedChallenge: challenge.challenge,
-      expectedOrigin: config.ORIGINS,
-      expectedRPID: config.RP_ID,
-      requireUserVerification: true,
-      credential: {
-        id: stored.credentialId,
-        publicKey: new Uint8Array(stored.publicKey),
-        counter: Number(stored.signCount),
-        transports: stored.transports ?? undefined,
-      },
-    })
+    let verification
+    try {
+      verification = await verifyAuthenticationResponse({
+        response: credential,
+        expectedChallenge: challenge.challenge,
+        expectedOrigin: config.ORIGINS,
+        expectedRPID: config.RP_ID,
+        requireUserVerification: true,
+        credential: {
+          id: stored.credentialId,
+          publicKey: new Uint8Array(stored.publicKey),
+          counter: Number(stored.signCount),
+          transports: stored.transports ?? undefined,
+        },
+      })
+    } catch (err) {
+      throw unauthorized('unverified', `Passkey proof rejected: ${err.message}`)
+    }
     if (!verification.verified) {
       throw unauthorized('unverified', 'Passkey proof rejected.')
     }

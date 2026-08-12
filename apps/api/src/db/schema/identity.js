@@ -2,6 +2,7 @@ import { relations, sql } from 'drizzle-orm'
 import {
   bigint,
   boolean,
+  check,
   customType,
   index,
   integer,
@@ -31,7 +32,9 @@ export const bytea = customType({
 /** Time-ordered ids: v7 keeps B-tree inserts append-only where v4 scatters them. */
 const id = () => uuid('id').primaryKey().$defaultFn(uuidv7)
 
-export const guests = pgTable('guests', {
+export const guests = pgTable(
+  'guests',
+  {
   id: id(),
   displayName: text('display_name').notNull(),
   // HMAC rather than a bare digest: emails and phone numbers are guessable, so
@@ -41,10 +44,14 @@ export const guests = pgTable('guests', {
   phoneHmac: bytea('phone_hmac').unique(),
   emailEnc: bytea('email_enc'),
   phoneEnc: bytea('phone_enc'),
-  status: text('status').notNull().default('active'), // active | suspended | erased
+  status: text('status').notNull().default('active'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-})
+},
+  // Enumerations live in the database, not only in a comment: an unexpected
+  // value should fail the write, not surface later as a journey nobody handles.
+  (table) => [check('guests_status', sql`${table.status} IN ('active','suspended','erased')`)],
+)
 
 /** One row per passkey. This table is the login system. */
 export const credentials = pgTable(
@@ -95,7 +102,11 @@ export const identityVerifications = pgTable(
     expiresAt: timestamp('expires_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index('identity_verifications_guest').on(table.guestId, table.createdAt)],
+  (table) => [
+    index('identity_verifications_guest').on(table.guestId, table.createdAt),
+    check('identity_verifications_method', sql`${table.method} IN ('document','manual_desk','simulated')`),
+    check('identity_verifications_result', sql`${table.result} IN ('passed','failed','manual_review')`),
+  ],
 )
 
 export const guestsRelations = relations(guests, ({ many }) => ({
