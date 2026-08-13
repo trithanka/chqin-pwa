@@ -28,3 +28,7 @@ dev-dist
 
 # local env
 .env
+
+# only the example is tracked
+.env.*
+!.env.example

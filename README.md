@@ -242,6 +242,24 @@ npm run db:reseed    # clear the data and seed again (keeps the schema)
 npm run db:reset     # drop schemas, migrate, seed — refuses anything not localhost
 ```
 
+### Switching between local and hosted
+
+Local is the default — `.env` points at the container from `npm run db:up`.
+Hosted config lives in its own file and is opted into per command:
+
+```bash
+npm run dev:api                      # local container
+CHQIN_ENV=supabase npm run dev:api   # hosted, from .env.supabase
+CHQIN_ENV=supabase npm run db:migrate
+```
+
+`CHQIN_ENV=x` loads `.env.x` *before* `.env`, and since neither the loader nor
+the shell overwrites a variable that is already set, first write wins and `.env`
+fills in the rest. The reason to switch with one flag rather than by editing a
+URL: `DATABASE_URL` and `DIRECT_URL` have to move together, and changing one
+but not the other points the app at one database while migrations hit another —
+which fails in a way that looks like data disappearing.
+
 ### Hosted Postgres
 
 `DATABASE_URL` can point anywhere; [.env.example](apps/api/.env.example) shows
