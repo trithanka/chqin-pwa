@@ -495,6 +495,24 @@ Each has a `vercel.json` already, carrying these settings:
 Output Directory is relative to the Root Directory, so it's `dist`, not
 `apps/web/dist`.
 
+**`vercel.json` is read from the Root Directory**, and paths inside it are
+relative to that. `cd ../..` reaches the repo root *from `apps/web`* — set the
+Root Directory to the repo root instead and the same command climbs out of the
+project entirely, which is when install breaks and the output directory can't
+be found. If you'd rather keep the Root Directory at the repo root, don't use
+these files; set each project up by hand instead:
+
+| Setting | `chqin-web` | `chqin-dashboard` |
+| --- | --- | --- |
+| Root Directory | `.` (repo root) | `.` |
+| Install Command | `npm install` | `npm install` |
+| Build Command | `npm run build --workspace @chqin/web` | `npm run build --workspace @chqin/dashboard` |
+| Output Directory | `apps/web/dist` | `apps/dashboard/dist` |
+
+That works, but the per-app Root Directory above is better: Vercel only
+rebuilds when files under the Root Directory change, so a repo-root project
+redeploys all three apps every time you touch any of them.
+
 Two settings that aren't optional:
 
 **Enable "Include source files outside of the Root Directory"** — npm
