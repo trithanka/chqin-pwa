@@ -473,11 +473,15 @@ is good until it expires. Add `staff_sessions` the day that matters.
 build output, and this repo has three deployables. Create three projects from
 the same GitHub repo, each with a different **Root Directory**:
 
-| Project | Root Directory | Serves | Suggested domain |
+| Project | Root Directory | Serves | Domain |
 | --- | --- | --- | --- |
-| `chqin-web` | `apps/web` | Guest PWA (static) | `chqin.app` |
-| `chqin-dashboard` | `apps/dashboard` | ChqIn for Business (static) | `admin.chqin.app` |
-| `chqin-api` | `apps/api` | Hono on Node functions | `api.chqin.app` |
+| `chqin-web` | `apps/web` | Guest PWA (static) | `app.chqin.com` |
+| `chqin-dashboard` | `apps/dashboard` | ChqIn for Business (static) | `business.chqin.com` |
+| `chqin-api` | `apps/api` | Hono on Node functions | `api.chqin.com` |
+
+The marketing site keeps the apex (`chqin.com`) from its own repo. Everything
+on one registrable domain is what lets the staff session cookie work with
+`SameSite=Lax` between `business.` and `api.`.
 
 The API can equally run on Render as a long-lived process — see below. Both are
 supported and neither needs a second copy of the code.
@@ -533,10 +537,10 @@ passkey, and there is no migration for that. Preview deployments get random
 hostnames, so passkeys enrolled on a preview URL only work on that preview —
 expected, not a bug.
 
-Keep the guest app on the apex and the dashboard on a subdomain. Both may talk
-to `api.chqin.app`: it's the same site, so the staff session cookie works with
-`SameSite=Lax`, and the guest ceremonies verify against `RP_ID=chqin.app`
-regardless of where the API runs.
+`RP_ID=app.chqin.com` binds passkeys to the guest app alone. Setting it to
+`chqin.com` instead would let credentials work across every `*.chqin.com`
+subdomain — more flexible if check-in ever moves to the apex, but then any
+subdomain you run can assert them. The tighter one is the better default.
 
 ### Environment variables
 
@@ -545,9 +549,9 @@ regardless of where the API runs.
 ```
 DATABASE_URL   postgresql://…@…pooler.supabase.com:6543/postgres   # app traffic
 DIRECT_URL     postgresql://…@…pooler.supabase.com:5432/postgres   # migrations
-RP_ID          chqin.app
+RP_ID          app.chqin.com
 RP_NAME        ChqIn
-ORIGINS        https://chqin.app,https://admin.chqin.app
+ORIGINS        https://app.chqin.com,https://business.chqin.com
 HASH_PEPPER    <a real secret>
 PG_CA_CERT     <contents of certs/supabase-ca.crt, if the bundle omits it>
 ```
@@ -557,11 +561,22 @@ Changing it logs everyone out and orphans every email lookup, so set it once
 and keep it. The config refuses to boot in production while it's still the
 development default.
 
-`chqin-web` and `chqin-dashboard`:
+`chqin-web`:
 
 ```
-VITE_API_URL   https://api.chqin.app
+VITE_API_URL          https://api.chqin.com
 ```
+
+`chqin-dashboard`:
+
+```
+VITE_API_URL          https://api.chqin.com
+VITE_GUEST_APP_URL    https://app.chqin.com
+```
+
+`VITE_GUEST_APP_URL` is the address printed on the desk card — where a *guest*
+goes, not where the dashboard lives. Without it the card points at the
+dashboard's own origin, so a card printed from staging sends guests to staging.
 
 Baked in at build time, so changing it needs a redeploy. Without it a deployed
 dashboard calls `localhost` and every request fails like the API is down — the

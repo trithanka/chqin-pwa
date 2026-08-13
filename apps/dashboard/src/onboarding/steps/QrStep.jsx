@@ -29,7 +29,11 @@ export default function QrStep({ data }) {
     [data.property.name],
   )
 
-  const url = `https://chqin.app/c/${token}`
+  // Where the guest app lives, not where the dashboard does — the printed card
+  // sends a guest to check in. Hardcoding it means a card printed from a
+  // staging dashboard points at production, or the reverse.
+  const guestApp = import.meta.env.VITE_GUEST_APP_URL ?? window.location.origin
+  const url = `${guestApp}/c/${token}`
 
   useEffect(() => {
     let cancelled = false
