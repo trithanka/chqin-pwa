@@ -9,6 +9,16 @@
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8787'
 
+/**
+ * VITE_API_URL is baked in at build time. Deploying without it leaves the
+ * built app calling localhost, where every request fails in a way that looks
+ * like the API is down rather than misconfigured — so name it.
+ */
+const misconfigured =
+  typeof location !== 'undefined' &&
+  location.protocol === 'https:' &&
+  /localhost|127\.0\.0\.1/.test(BASE)
+
 export class ApiError extends Error {
   constructor(code, message, status) {
     super(message)
@@ -28,7 +38,13 @@ async function request(path, options = {}) {
   } catch {
     // A dead API and a rejected request are different problems, and the fix
     // for this one is "start the server", so say that.
-    throw new ApiError('offline', "Can't reach the server. Is the API running?", 0)
+    throw new ApiError(
+      'offline',
+      misconfigured
+        ? 'This build has no API address. Set VITE_API_URL and redeploy.'
+        : "Can't reach the server. Is the API running?",
+      0,
+    )
   }
 
   const data = await response.json().catch(() => ({}))

@@ -466,3 +466,74 @@ cost, so neither the message nor the timing says who has an account.
 [lib/session.js](apps/api/src/lib/session.js). The trade is explicit: no
 server-side revocation, so logout clears the browser's copy and a stolen cookie
 is good until it expires. Add `staff_sessions` the day that matters.
+
+## Deploying to Vercel
+
+**Three projects, one repo.** A Vercel project has one root directory and one
+build output, and this repo has three deployables. Create three projects from
+the same GitHub repo, each with a different **Root Directory**:
+
+| Project | Root Directory | Serves | Suggested domain |
+| --- | --- | --- | --- |
+| `chqin-web` | `apps/web` | Guest PWA (static) | `chqin.app` |
+| `chqin-dashboard` | `apps/dashboard` | ChqIn for Business (static) | `admin.chqin.app` |
+| `chqin-api` | `apps/api` | Hono on Node functions | `api.chqin.app` |
+
+Each has a `vercel.json` already. In project settings, enable **"Include source
+files outside of the Root Directory"** — npm workspaces hoist `node_modules` to
+the repo root, and the build can't see them otherwise.
+
+### The domain decision comes first
+
+**Passkeys bind to the RP ID, which is a hostname.** Pick the guest app's
+domain once and set `RP_ID` to it; changing it later invalidates every enrolled
+passkey, and there is no migration for that. Preview deployments get random
+hostnames, so passkeys enrolled on a preview URL only work on that preview —
+expected, not a bug.
+
+Keep the guest app on the apex and the dashboard on a subdomain. Both may talk
+to `api.chqin.app`: it's the same site, so the staff session cookie works with
+`SameSite=Lax`, and the guest ceremonies verify against `RP_ID=chqin.app`
+regardless of where the API runs.
+
+### Environment variables
+
+`chqin-api`:
+
+```
+DATABASE_URL   postgresql://…@…pooler.supabase.com:6543/postgres   # app traffic
+DIRECT_URL     postgresql://…@…pooler.supabase.com:5432/postgres   # migrations
+RP_ID          chqin.app
+RP_NAME        ChqIn
+ORIGINS        https://chqin.app,https://admin.chqin.app
+HASH_PEPPER    <a real secret>
+PG_CA_CERT     <contents of certs/supabase-ca.crt, if the bundle omits it>
+```
+
+`HASH_PEPPER` keys the email lookup hashes **and** signs staff session cookies.
+Changing it logs everyone out and orphans every email lookup, so set it once
+and keep it. The config refuses to boot in production while it's still the
+development default.
+
+`chqin-web` and `chqin-dashboard`:
+
+```
+VITE_API_URL   https://api.chqin.app
+```
+
+Baked in at build time, so changing it needs a redeploy. Without it a deployed
+dashboard calls `localhost` and every request fails like the API is down — the
+client detects that case and says so instead.
+
+### Migrations don't run themselves
+
+Vercel builds don't touch the database. Run them from your machine against the
+production URL, before the deploy that needs them:
+
+```bash
+DATABASE_URL=… DIRECT_URL=… npm run db:migrate
+```
+
+Serverless suits this workload: check-in traffic is bursty and each function is
+short-lived, which is exactly what the transaction pooler on 6543 is for. The
+pool is capped at 5 per instance for the same reason.

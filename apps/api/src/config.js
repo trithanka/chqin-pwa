@@ -35,6 +35,9 @@ const schema = z.object({
     .transform((value) => value.split(',').map((o) => o.trim()).filter(Boolean)),
 
   HASH_PEPPER: z.string().default('dev-only-pepper-change-me'),
+  // Hosts that don't ship the repo's files (serverless bundles) can pass the
+  // database's CA certificate directly instead.
+  PG_CA_CERT: z.string().optional(),
 
   CHALLENGE_TTL_MS: z.coerce.number().default(120_000),
   SESSION_TTL_MS: z.coerce.number().default(300_000),
@@ -74,7 +77,8 @@ export const isRemote = (url = config.DATABASE_URL) =>
  * doesn't stop anyone.
  */
 const CA_PATH = new URL('../certs/supabase-ca.crt', import.meta.url)
-const ca = existsSync(CA_PATH) ? readFileSync(CA_PATH, 'utf8') : undefined
+const ca =
+  process.env.PG_CA_CERT ?? (existsSync(CA_PATH) ? readFileSync(CA_PATH, 'utf8') : undefined)
 
 export const sslFor = (url) =>
   isRemote(url) ? { rejectUnauthorized: true, ...(ca ? { ca } : {}) } : false
