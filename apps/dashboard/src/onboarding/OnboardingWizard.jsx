@@ -40,18 +40,33 @@ const STORAGE_KEY = 'chqin.onboarding.draft'
 const loadDraft = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return { data: BLANK, stepIndex: 0, furthest: 0 }
+    if (!raw) return { data: BLANK, stepIndex: 0, furthest: 0, resumed: false }
     const saved = JSON.parse(raw)
+
     // Position is part of the draft: coming back to step 1 with the answers
     // already filled in reads as a bug, not a feature.
     const furthest = Math.min(saved.furthest ?? 0, STEPS.length - 1)
+    const data = {
+      ...BLANK,
+      ...saved.data,
+      account: { ...BLANK.account, ...saved.data?.account },
+    }
+
+    // …except the password, which is never saved. Resuming past this step
+    // would carry an empty one all the way to "Go live" and fail there, which
+    // is how a wizard sends {"password": ""} to an API.
+    if (!data.account.password) {
+      return { data, stepIndex: 0, furthest: 0, resumed: Boolean(saved.data?.account?.email) }
+    }
+
     return {
-      data: { ...BLANK, ...saved.data, account: { ...BLANK.account, ...saved.data?.account } },
+      data,
       stepIndex: Math.min(saved.stepIndex ?? 0, furthest),
       furthest,
+      resumed: false,
     }
   } catch {
-    return { data: BLANK, stepIndex: 0, furthest: 0 }
+    return { data: BLANK, stepIndex: 0, furthest: 0, resumed: false }
   }
 }
 
@@ -62,6 +77,7 @@ export default function OnboardingWizard({ onComplete }) {
   // How far they've been: lets them jump back to a finished step and return.
   const [furthest, setFurthest] = useState(draft.furthest)
   const [showErrors, setShowErrors] = useState(false)
+  const [resumed, setResumed] = useState(draft.resumed)
 
   // Onboarding is long enough that a refresh mid-way shouldn't cost the work.
   // With no backend, the draft lives in this browser only.
@@ -84,6 +100,14 @@ export default function OnboardingWizard({ onComplete }) {
 
   const errors = useMemo(() => validate(step.key, data), [step.key, data])
   const canContinue = Object.keys(errors).length === 0
+
+  /**
+   * Re-check every step before submitting, not just the one on screen. A step
+   * can become invalid after you've walked past it — the password is dropped
+   * on a refresh — and finding that out from a 400 is not finding it out.
+   */
+  const firstInvalidStep = () =>
+    STEPS.findIndex((s) => Object.keys(validate(s.key, data)).length > 0)
 
   const next = () => {
     if (!canContinue) {
@@ -110,6 +134,7 @@ export default function OnboardingWizard({ onComplete }) {
   }
 
   const reset = () => {
+    setResumed(false)
     setData(BLANK)
     setStepIndex(0)
     setFurthest(0)
@@ -155,12 +180,27 @@ export default function OnboardingWizard({ onComplete }) {
       {/* Content */}
       <main className="flex flex-1 justify-center px-5 py-8 sm:px-10 lg:py-14">
         <div className="w-full max-w-[620px]">
+          {resumed && stepIndex === 0 && (
+            <p className="mb-5 rounded-xl bg-brand-soft px-4 py-3 text-[13px] leading-relaxed text-brand">
+              Picking up where you left off. Passwords aren't saved in the
+              browser, so please set yours again.
+            </p>
+          )}
+
           <step.Screen
             data={data}
             patch={patch}
             errors={showErrors ? errors : {}}
             onRestart={reset}
-            onComplete={onComplete}
+            onComplete={async (payload) => {
+              const invalid = firstInvalidStep()
+              if (invalid !== -1) {
+                setStepIndex(invalid)
+                setShowErrors(true)
+                throw new Error('Some details are missing. Check the highlighted fields.')
+              }
+              return onComplete?.(payload)
+            }}
           />
 
           {!step.final && (
