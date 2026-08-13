@@ -479,6 +479,9 @@ the same GitHub repo, each with a different **Root Directory**:
 | `chqin-dashboard` | `apps/dashboard` | ChqIn for Business (static) | `admin.chqin.app` |
 | `chqin-api` | `apps/api` | Hono on Node functions | `api.chqin.app` |
 
+The API can equally run on Render as a long-lived process — see below. Both are
+supported and neither needs a second copy of the code.
+
 Each has a `vercel.json` already. In project settings, enable **"Include source
 files outside of the Root Directory"** — npm workspaces hoist `node_modules` to
 the repo root, and the build can't see them otherwise.
@@ -537,3 +540,33 @@ DATABASE_URL=… DIRECT_URL=… npm run db:migrate
 Serverless suits this workload: check-in traffic is bursty and each function is
 short-lived, which is exactly what the transaction pooler on 6543 is for. The
 pool is capped at 5 per instance for the same reason.
+
+## The API on Render instead
+
+[render.yaml](render.yaml) defines the service; point Render at the repo and it
+picks it up. Nothing else changes — a long-running process runs the same
+`src/index.js` as local development, so there's no adapter and no second entry
+point to keep in step.
+
+| Setting | Value |
+| --- | --- |
+| Root directory | `apps/api` |
+| Build command | `npm install --workspaces --include-workspace-root` |
+| Start command | `npm start` |
+| Health check | `/health` |
+
+Environment variables are the same list as the Vercel API project. Render
+injects `PORT`; the config already reads it.
+
+**Which to pick.** Render suits this API better in one way that matters: a warm
+process holds its database connections, so there's no per-request connect and
+no cold start between a guest scanning a QR and the welcome screen. Vercel
+suits it in another: nothing to keep running, and no instance to size.
+
+**Do not use Render's free tier for this.** Free instances sleep after fifteen
+minutes and take 30–60 seconds to wake. A guest standing at a desk with a
+scanned code is the worst possible audience for a cold start, and it will read
+as the product being broken.
+
+If the API moves to Render, the two front ends stay on Vercel — only
+`VITE_API_URL` and the API's `ORIGINS` change.

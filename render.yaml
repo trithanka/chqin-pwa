@@ -1,0 +1,41 @@
+# Render blueprint. `render.yaml` at the repo root defines the service, so it
+# can be recreated without clicking through settings.
+#
+# The API is a long-running process here rather than a function, which is why
+# it needs no adapter: `npm start` runs the same src/index.js used locally.
+services:
+  - type: web
+    name: chqin-api
+    runtime: node
+    region: singapore
+    plan: starter
+    # Not `free`: free instances sleep after 15 minutes, and the first request
+    # back pays a 30-60 second cold start. A guest standing at a desk with a
+    # scanned QR is the worst possible audience for that.
+    rootDir: apps/api
+    # Workspaces hoist node_modules to the repo root, so install from there.
+    buildCommand: npm install --workspaces --include-workspace-root
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: NODE_ENV
+        value: production
+      # Set the rest in the dashboard — they are secrets, or they change per
+      # environment. See README → Deploying.
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: RP_ID
+        sync: false
+      - key: RP_NAME
+        value: ChqIn
+      - key: ORIGINS
+        sync: false
+      - key: HASH_PEPPER
+        generateValue: true
+      - key: PG_CA_CERT
+        sync: false
