@@ -482,9 +482,30 @@ the same GitHub repo, each with a different **Root Directory**:
 The API can equally run on Render as a long-lived process — see below. Both are
 supported and neither needs a second copy of the code.
 
-Each has a `vercel.json` already. In project settings, enable **"Include source
-files outside of the Root Directory"** — npm workspaces hoist `node_modules` to
-the repo root, and the build can't see them otherwise.
+Each has a `vercel.json` already, carrying these settings:
+
+| Setting | `chqin-web` | `chqin-dashboard` | `chqin-api` |
+| --- | --- | --- | --- |
+| Framework preset | Vite | Vite | Other |
+| Root Directory | `apps/web` | `apps/dashboard` | `apps/api` |
+| Install Command | `cd ../.. && npm install` | same | same |
+| Build Command | `npm run build` | `npm run build` | *(none)* |
+| Output Directory | `dist` | `dist` | *(none — functions)* |
+
+Output Directory is relative to the Root Directory, so it's `dist`, not
+`apps/web/dist`.
+
+Two settings that aren't optional:
+
+**Enable "Include source files outside of the Root Directory"** — npm
+workspaces hoist `node_modules` to the repo root, and the build can't see them
+otherwise.
+
+**Install from the repo root** (`cd ../.. && npm install`). Running
+`npm install` inside a workspace pulls only that workspace's dependencies: the
+dashboard builds without `react-router-dom` and fails on an unresolved import,
+while the guest app builds fine — so the mistake looks like a broken
+dashboard rather than a broken install.
 
 ### The domain decision comes first
 
@@ -551,7 +572,7 @@ point to keep in step.
 | Setting | Value |
 | --- | --- |
 | Root directory | `apps/api` |
-| Build command | `npm install --workspaces --include-workspace-root` |
+| Build command | `cd ../.. && npm install` |
 | Start command | `npm start` |
 | Health check | `/health` |
 

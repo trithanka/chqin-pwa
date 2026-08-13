@@ -2,8 +2,13 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "buildCommand": "",
-  "installCommand": "npm install --workspaces --include-workspace-root",
-  "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }],
+  "installCommand": "cd ../.. && npm install",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api/index"
+    }
+  ],
   "functions": {
     "api/index.js": {
       "includeFiles": "certs/**"

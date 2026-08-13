@@ -13,8 +13,10 @@ services:
     # back pays a 30-60 second cold start. A guest standing at a desk with a
     # scanned QR is the worst possible audience for that.
     rootDir: apps/api
-    # Workspaces hoist node_modules to the repo root, so install from there.
-    buildCommand: npm install --workspaces --include-workspace-root
+    # Install from the repo root: running npm install inside a workspace pulls
+    # only that workspace's dependencies, and the build fails on a missing
+    # import from a sibling package.
+    buildCommand: cd ../.. && npm install
     startCommand: npm start
     healthCheckPath: /health
     autoDeploy: true
