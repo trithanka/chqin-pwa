@@ -9,6 +9,23 @@ import StepHeader from '../../components/StepHeader'
  */
 export default function LiveStep({ data, onRestart, onComplete }) {
   const [live, setLive] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+
+  const goLive = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await onComplete?.(data)
+      setLive(true)
+    } catch (err) {
+      // Most likely "that email already has an account" — recoverable, and the
+      // wizard's answers are still on screen to fix.
+      setError(err.message ?? 'Could not finish setup.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   if (live) {
     return (
@@ -26,7 +43,7 @@ export default function LiveStep({ data, onRestart, onComplete }) {
         </p>
 
         <div className="mt-8 flex flex-wrap justify-center gap-2.5">
-          <Button iconRight={ArrowRight} onClick={() => onComplete?.(data)}>
+          <Button iconRight={ArrowRight} onClick={() => window.location.assign('/app')}>
             Go to dashboard
           </Button>
           <Button tone="ghost" icon={RotateCcw} onClick={onRestart}>
@@ -35,7 +52,8 @@ export default function LiveStep({ data, onRestart, onComplete }) {
         </div>
 
         <p className="mt-10 text-[12px] text-slate-400">
-          Prototype — nothing has been saved to a server.
+          Your property, rooms and account are saved. Guests can check in as
+          soon as the card is on the desk.
         </p>
       </div>
     )
@@ -73,8 +91,14 @@ export default function LiveStep({ data, onRestart, onComplete }) {
         />
       </div>
 
+      {error && (
+        <p className="mt-6 rounded-lg bg-red-50 px-3 py-2.5 text-[13px] font-medium text-red-700">
+          {error}
+        </p>
+      )}
+
       <div className="mt-8">
-        <Button iconRight={ArrowRight} onClick={() => setLive(true)}>
+        <Button iconRight={ArrowRight} onClick={goLive} loading={busy}>
           Go live
         </Button>
         <p className="mt-3 text-[12.5px] text-slate-500">

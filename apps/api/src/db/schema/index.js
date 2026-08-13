@@ -8,10 +8,12 @@
  *   identity.js — guests, credentials, KYC events   (global)
  *   property.js — venues, rooms, bookings, sessions (tenanted by venue)
  *   checkin.js  — the join between them
+ *   staff.js    — the people who run a venue (not the guests)
  *   auth.js     — challenges and the audit log
  */
 
 export * from './identity.js'
 export * from './property.js'
 export * from './checkin.js'
+export * from './staff.js'
 export * from './auth.js'

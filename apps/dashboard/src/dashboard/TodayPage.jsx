@@ -1,7 +1,10 @@
 import { Link } from 'react-router-dom'
 import { CalendarCheck } from 'lucide-react'
 import { EmptyState, PageHeader, StatTile, StatusPill, TableWrap, Td, Th } from '../components/ui'
-import { JOURNEY, STATUS, today, venue } from '../data/mock'
+import { api } from '../api'
+import Async from '../components/Async'
+import { journeyOf, statusOf } from '../labels'
+import { useApi } from '../useApi'
 
 const time = (iso) =>
   new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
@@ -12,7 +15,11 @@ const time = (iso) =>
  * at the top, because those are the only rows anyone acts on.
  */
 export default function TodayPage() {
-  const { arrivals, checkedIn, awaiting, inHouse } = today()
+  const { data, error, loading, reload } = useApi(() => api.get('/staff/overview'))
+
+  const arrivals = data?.arrivals ?? []
+  const checkedIn = arrivals.filter((b) => b.status === 'checked_in')
+  const awaiting = arrivals.filter((b) => b.status === 'confirmed')
 
   const rows = [...arrivals].sort((a, b) => {
     if (a.status !== b.status) return a.status === 'confirmed' ? -1 : 1
@@ -44,13 +51,14 @@ export default function TodayPage() {
           sub={awaiting.length ? 'no action needed' : 'all in'}
           tone={awaiting.length ? 'warn' : 'neutral'}
         />
-        <StatTile label="In house" value={inHouse.length} sub={`of ${venue.rooms} rooms`} />
+        <StatTile label="In house" value={data?.inHouse ?? 0} sub={`of ${data?.rooms ?? 0} rooms`} />
       </div>
 
       <h2 className="mb-3 text-[15px] font-bold tracking-[-0.02em] text-slate-900">
         Arrivals
       </h2>
 
+      <Async loading={loading} error={error} onRetry={reload}>
       {rows.length === 0 ? (
         <EmptyState
           icon={CalendarCheck}
@@ -78,17 +86,17 @@ export default function TodayPage() {
                   >
                     {booking.guestName}
                   </Link>
-                  {booking.journey && (
+                  {journeyOf(booking.journey) && (
                     <span className="ml-2 text-[12px] text-slate-400">
-                      {JOURNEY[booking.journey].label}
+                      {journeyOf(booking.journey).label}
                     </span>
                   )}
                 </Td>
                 <Td className="tabular-nums font-semibold text-slate-700">{booking.room}</Td>
                 <Td className="tabular-nums">{booking.reference}</Td>
                 <Td>
-                  <StatusPill tone={STATUS[booking.status].tone}>
-                    {STATUS[booking.status].label}
+                  <StatusPill tone={statusOf(booking.status).tone}>
+                    {statusOf(booking.status).label}
                   </StatusPill>
                 </Td>
                 <Td className="text-right tabular-nums">
@@ -99,6 +107,7 @@ export default function TodayPage() {
           </tbody>
         </TableWrap>
       )}
+      </Async>
     </div>
   )
 }

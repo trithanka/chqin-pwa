@@ -29,6 +29,13 @@
       "when": 1786556752414,
       "tag": "0003_hotels_to_venues",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786602445558,
+      "tag": "0004_staff",
+      "breakpoints": true
     }
   ]
 }

@@ -31,14 +31,13 @@ export default function LoginPage() {
 
     setBusy(true)
     try {
-      // The real call returns 401 for both a wrong email and a wrong password,
-      // and says the same thing either way — telling an attacker which half
-      // was right turns a login form into an account-enumeration tool.
-      await new Promise((resolve) => setTimeout(resolve, 350))
-      signIn({ name: 'Priya Nair', email: email.trim(), role: 'owner' })
+      // The API answers the same way for a wrong email and a wrong password —
+      // distinct messages turn a login form into an account-enumeration tool —
+      // so whatever it says is what the guest-facing side shows.
+      await signIn({ email: email.trim(), password })
       navigate('/app')
-    } catch {
-      setErrors({ form: "That email and password don't match." })
+    } catch (err) {
+      setErrors({ form: err.message })
     } finally {
       setBusy(false)
     }

@@ -15,14 +15,26 @@ import { useSession } from './session'
  * Signed in: today's arrivals, bookings, guests, and the desk code.
  */
 export default function App() {
-  const { session } = useSession()
+  const { status } = useSession()
+
+  // Until /staff/me answers we don't know, and guessing "signed out" would
+  // bounce a signed-in user to the login screen on every refresh.
+  if (status === 'checking') {
+    return (
+      <div className="grid min-h-dvh place-items-center text-[13.5px] font-medium text-slate-400">
+        Loading…
+      </div>
+    )
+  }
+
+  const signedIn = status === 'authenticated'
 
   return (
     <Routes>
-      <Route path="/" element={session ? <Navigate to="/app" replace /> : <LoginPage />} />
+      <Route path="/" element={signedIn ? <Navigate to="/app" replace /> : <LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
 
-      <Route path="/app" element={session ? <Layout /> : <Navigate to="/" replace />}>
+      <Route path="/app" element={signedIn ? <Layout /> : <Navigate to="/" replace />}>
         <Route index element={<TodayPage />} />
         <Route path="bookings" element={<BookingsPage />} />
         <Route path="bookings/:id" element={<BookingDetailPage />} />

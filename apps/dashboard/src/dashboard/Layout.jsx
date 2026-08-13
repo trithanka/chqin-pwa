@@ -1,6 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { CalendarCheck, LayoutDashboard, LogOut, QrCode, Users } from 'lucide-react'
-import { venue } from '../data/mock'
 import { useSession } from '../session'
 import Logo from '../components/Logo'
 
@@ -12,7 +11,7 @@ const NAV = [
 ]
 
 export default function Layout() {
-  const { session, signOut } = useSession()
+  const { user, signOut } = useSession()
   const navigate = useNavigate()
 
   return (
@@ -22,9 +21,11 @@ export default function Layout() {
           <Logo wordmark={false} className="size-7 shrink-0 text-white" />
           <div className="min-w-0 leading-tight">
             <p className="truncate text-[14px] font-bold tracking-[-0.02em]">
-              {session?.venue ?? venue.name}
+              {user?.venue?.name ?? 'Your property'}
             </p>
-            <p className="truncate text-[11.5px] font-medium text-white/45">{venue.location}</p>
+            <p className="truncate text-[11.5px] font-medium text-white/45">
+              {user?.venue?.location ?? ''}
+            </p>
           </div>
         </div>
 
@@ -50,17 +51,17 @@ export default function Layout() {
         <div className="mt-auto hidden lg:block">
           <div className="flex items-center gap-2.5 rounded-lg px-3 py-2.5">
             <span className="grid size-7 shrink-0 place-items-center rounded-full bg-white/10 text-[11px] font-bold text-white/70">
-              {(session?.name ?? 'P')[0].toUpperCase()}
+              {(user?.name ?? 'P')[0].toUpperCase()}
             </span>
             <div className="min-w-0 flex-1 leading-tight">
-              <p className="truncate text-[12.5px] font-semibold text-white/80">{session?.name}</p>
-              <p className="truncate text-[11px] capitalize text-white/35">{session?.role}</p>
+              <p className="truncate text-[12.5px] font-semibold text-white/80">{user?.name}</p>
+              <p className="truncate text-[11px] capitalize text-white/35">{user?.role}</p>
             </div>
             <button
               type="button"
               aria-label="Sign out"
-              onClick={() => {
-                signOut()
+              onClick={async () => {
+                await signOut()
                 navigate('/')
               }}
               className="rounded-md p-1.5 text-white/40 transition-colors hover:bg-white/10 hover:text-white"

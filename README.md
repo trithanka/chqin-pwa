@@ -397,13 +397,14 @@ decision, not a coding one, and is deliberately left open.
 | `/app/guests` | People who have checked in here, and what devices they hold |
 | `/app/code` | The desk card again, because cards get spilled on |
 
-**UI only — nothing talks to the API.** Onboarding does everything it can
-locally: validation, the room range builder, invitations, a real QR on the
-printable desk card, and a draft (including your position in the flow) that
-survives a refresh. The signed-in screens read
-[src/data/mock.js](apps/dashboard/src/data/mock.js), whose rows are shaped like
-the tables in [docs/data-model.md](docs/data-model.md) so they become fetches
-without reshaping the components.
+**It runs on real data.** Registration creates the venue, its rooms and the
+owner's account; signing in sets an httpOnly session cookie; every screen reads
+the API. Guests appear on the dashboard because they checked in through the QR
+flow, not because a fixture says so.
+
+What's still stubbed: invitations are accepted and dropped (a table nobody
+reads yet is schema to migrate before it has a user), and "check in manually"
+on a booking is a button with no endpoint behind it.
 
 The booking detail says *how* someone verified — returning, new device, first
 time — because that is the question a desk asks when something looks off, and
@@ -434,9 +435,34 @@ lockout, and a reset flow whose tokens are single-use and short-lived.
 the fallback. Nobody types eighty rooms one at a time, and the person doing
 this is doing it once.
 
-Before it can do anything real, the API needs the tables the data model
-deliberately deferred — `staff_users`, `staff_memberships`, `invitations` —
-plus a staff auth surface separate from the guest one, and read endpoints
-(`GET /staff/bookings`, `GET /staff/guests`) behind it.
-[session.js](apps/dashboard/src/session.js) is the seam: it is the only module
-that knows who is signed in, so it is the only one that changes.
+### Staff API
+
+| Route | Does |
+| --- | --- |
+| `POST /staff/register` | Owner + venue + rooms in one transaction, and signs you in |
+| `POST /staff/login` \| `/logout` | Email and password; sets or clears the session cookie |
+| `GET /staff/me` | Who's signed in, and which venue |
+| `GET /staff/overview` | Today's arrivals and the counts a desk watches |
+| `GET /staff/bookings` \| `/:id` | Reservations at this venue |
+| `GET /staff/guests` \| `/:id` | People who have checked in *here* |
+
+**Every read filters by the venue on the session**, not just "is this request
+authenticated". With two venues in the system, a missing filter isn't a bug in
+someone's dashboard — it's a cross-tenant leak, so the test suite registers two
+venues and asserts each sees only its own rows and 404s on the other's ids.
+
+**`/staff/guests` is where the product's promise is kept or broken.** It
+returns guests with a check-in *at this venue*, and only what the venue
+legitimately holds: name, the ID-check date, device *count*, stays here. Not
+other venues' stays, not a global count, never key material. The dashboard says
+as much on screen; the query is what makes it true.
+
+**Passwords** are scrypt (`scrypt$N$r$p$salt$hash`, so a later move to argon2id
+can rehash on next login instead of locking everyone out). A wrong email and a
+wrong password get the same answer, and an unknown email still pays the hashing
+cost, so neither the message nor the timing says who has an account.
+
+**Sessions are a signed cookie, not a table** — see
+[lib/session.js](apps/api/src/lib/session.js). The trade is explicit: no
+server-side revocation, so logout clears the browser's copy and a stolen cookie
+is good until it expires. Add `staff_sessions` the day that matters.

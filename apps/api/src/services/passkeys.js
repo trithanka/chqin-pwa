@@ -8,7 +8,13 @@ import {
 import { cose, decodeCredentialPublicKey } from '@simplewebauthn/server/helpers'
 import { config } from '../config.js'
 import { db, transaction } from '../db/client.js'
-import { bookings, credentials, guests, webauthnChallenges } from '../db/schema/index.js'
+import {
+  bookings,
+  credentials,
+  guests,
+  identityVerifications,
+  webauthnChallenges,
+} from '../db/schema/index.js'
 import { lookupHash } from '../lib/crypto.js'
 import { uuidv7 } from '../lib/ids.js'
 import { ApiError, forbidden, unauthorized } from '../lib/errors.js'
@@ -138,6 +144,20 @@ async function materialiseGuest(tx, challenge, session) {
       .set({ guestId: guest.id })
       .where(and(eq(bookings.id, session.bookingId), isNull(bookings.guestId)))
   }
+
+  // The identity check happened before this guest existed — it was recorded
+  // against the session. Attach it now, or the proof that an ID was seen
+  // points at nobody, which is exactly the record a regulator asks for.
+  await tx
+    .update(identityVerifications)
+    .set({ guestId: guest.id })
+    .where(
+      and(
+        eq(identityVerifications.sessionId, session.id),
+        isNull(identityVerifications.guestId),
+      ),
+    )
+
   return guest.id
 }
 

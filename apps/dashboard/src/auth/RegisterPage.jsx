@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import OnboardingWizard from '../onboarding/OnboardingWizard'
 import { useSession } from '../session'
@@ -8,20 +9,35 @@ import { useSession } from '../session'
  * something done once.
  */
 export default function RegisterPage() {
-  const { signIn } = useSession()
+  const { registerVenue } = useSession()
   const navigate = useNavigate()
+  const [error, setError] = useState(null)
+
+  /**
+   * The whole wizard posts at the end, not step by step: a half-created
+   * property with no rooms and no owner is worse than one the guest can retry.
+   */
+  const submit = async (data) => {
+    setError(null)
+    await registerVenue({
+      account: {
+        name: data.account.name,
+        email: data.account.email,
+        password: data.account.password,
+        role: data.account.role,
+      },
+      property: data.property,
+      rooms: data.rooms,
+      team: data.team,
+    })
+    navigate('/app')
+  }
 
   return (
     <OnboardingWizard
-      onComplete={(data) => {
-        signIn({
-          name: data.account.name || 'Owner',
-          email: data.account.email,
-          role: data.account.role,
-          venue: data.property.name,
-        })
-        navigate('/app')
-      }}
+      onComplete={submit}
+      submitError={error}
+      onSubmitError={setError}
     />
   )
 }

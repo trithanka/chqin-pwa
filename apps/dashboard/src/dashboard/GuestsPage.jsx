@@ -12,7 +12,10 @@ import {
   Td,
   Th,
 } from '../components/ui'
-import { STATUS, bookingsForGuest, guestById, guests } from '../data/mock'
+import { api } from '../api'
+import Async from '../components/Async'
+import { statusOf } from '../labels'
+import { useApi } from '../useApi'
 
 const date = (iso) => new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })
 const shortDate = (iso) => new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short' })
@@ -25,13 +28,13 @@ const age = (dob) => {
 
 export default function GuestsPage() {
   const [query, setQuery] = useState('')
+  const { data, error, loading, reload } = useApi(() => api.get('/staff/guests'))
+  const guests = data?.guests ?? []
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return guests
-      .filter((g) => !q || g.name.toLowerCase().includes(q))
-      .sort((a, b) => b.stays - a.stays)
-  }, [query])
+    return guests.filter((g) => !q || g.name.toLowerCase().includes(q))
+  }, [guests, query])
 
   return (
     <div>
@@ -41,11 +44,12 @@ export default function GuestsPage() {
         actions={<SearchInput value={query} onChange={setQuery} placeholder="Search by name" />}
       />
 
+      <Async loading={loading} error={error} onRetry={reload}>
       {rows.length === 0 ? (
         <EmptyState
           icon={Users}
-          title="No guests match"
-          body="Guests appear here after their first check-in."
+          title={guests.length ? 'No guests match' : 'No guests yet'}
+          body="Guests appear here after their first check-in at this property."
         />
       ) : (
         <TableWrap>
@@ -69,12 +73,12 @@ export default function GuestsPage() {
                     {guest.name}
                   </Link>
                 </Td>
-                <Td className="tabular-nums">{age(guest.dateOfBirth)}</Td>
+                <Td className="tabular-nums">{guest.dateOfBirth ? age(guest.dateOfBirth) : '—'}</Td>
                 <Td>
-                  {guest.devices.length ? (
+                  {guest.devices ? (
                     <span className="inline-flex items-center gap-1.5 tabular-nums">
                       <Smartphone size={14} className="text-slate-400" />
-                      {guest.devices.length}
+                      {guest.devices}
                     </span>
                   ) : (
                     <span className="text-slate-400">none</span>
@@ -87,6 +91,7 @@ export default function GuestsPage() {
           </tbody>
         </TableWrap>
       )}
+      </Async>
 
       <p className="mt-4 max-w-[70ch] text-[12.5px] leading-relaxed text-slate-500">
         You see the guests who have stayed with you. You do not see where else
@@ -99,12 +104,17 @@ export default function GuestsPage() {
 
 export function GuestDetailPage() {
   const { id } = useParams()
-  const guest = guestById(id)
-  const stays = guest ? bookingsForGuest(guest.id) : []
+  const { data: guest, error, loading, reload } = useApi(() => api.get(`/staff/guests/${id}`), [id])
 
-  if (!guest) {
-    return <EmptyState icon={Users} title="Guest not found" body="The link may be out of date." />
+  if (loading || error) {
+    return (
+      <Async loading={loading} error={error} onRetry={reload}>
+        {null}
+      </Async>
+    )
   }
+
+  const stays = guest.stays ?? []
 
   return (
     <div>
@@ -123,12 +133,14 @@ export function GuestDetailPage() {
             Identity
           </h2>
           <DetailRow label="Date of birth">
-            {date(guest.dateOfBirth)} · {age(guest.dateOfBirth)}
+            {guest.dateOfBirth ? `${date(guest.dateOfBirth)} · ${age(guest.dateOfBirth)}` : 'not recorded'}
           </DetailRow>
           <DetailRow label="Gender">
-            <span className="capitalize">{guest.gender}</span>
+            <span className="capitalize">{guest.gender ?? 'not recorded'}</span>
           </DetailRow>
-          <DetailRow label="ID checked">{date(guest.identityCheckedAt)}</DetailRow>
+          <DetailRow label="ID checked">
+            {guest.identityCheckedAt ? date(guest.identityCheckedAt) : 'not recorded'}
+          </DetailRow>
           <p className="mt-3 text-[12.5px] leading-relaxed text-slate-500">
             Verified once, at their first check-in. The document itself was
             never stored — only the fact that it was checked.
@@ -145,8 +157,8 @@ export function GuestDetailPage() {
             </p>
           ) : (
             guest.devices.map((device) => (
-              <DetailRow key={device.label} label={device.label}>
-                last used {shortDate(device.lastUsedAt)}
+              <DetailRow key={device.addedAt} label={device.label ?? 'Unnamed device'}>
+                {device.lastUsedAt ? `last used ${shortDate(device.lastUsedAt)}` : 'not used yet'}
               </DetailRow>
             ))
           )}
@@ -177,8 +189,8 @@ export function GuestDetailPage() {
                     {shortDate(booking.arrival)} → {shortDate(booking.departure)}
                   </Td>
                   <Td className="text-right">
-                    <StatusPill tone={STATUS[booking.status].tone}>
-                      {STATUS[booking.status].label}
+                    <StatusPill tone={statusOf(booking.status).tone}>
+                      {statusOf(booking.status).label}
                     </StatusPill>
                   </Td>
                 </tr>

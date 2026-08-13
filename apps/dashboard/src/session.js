@@ -1,33 +1,20 @@
 import { useSyncExternalStore } from 'react'
+import { api } from './api'
 
 /**
- * Stand-in for a staff session.
+ * Who is signed in, according to the server.
  *
- * There is no staff auth on the API yet — no `staff_users`, no memberships, no
- * session cookie — so this is a flag in localStorage that gates the routes.
- * When the real thing lands it replaces this module and nothing else: the
- * screens only ever ask "who is signed in", never "is the token valid".
- *
- * One store shared by every component, not per-component state: the sign-in
- * screen and the router have to agree about who is signed in, and useState in
- * each of them means they don't.
+ * The session itself is an httpOnly cookie the browser can't read, so this
+ * holds only the profile `/staff/me` returns. `status` matters: 'checking'
+ * means we haven't asked yet, and rendering the sign-in screen during that
+ * moment would bounce a signed-in user out on every refresh.
  */
 
-const KEY = 'chqin.dashboard.session'
-
-const read = () => {
-  try {
-    const raw = localStorage.getItem(KEY)
-    return raw ? JSON.parse(raw) : null
-  } catch {
-    return null
-  }
-}
-
-let current = read()
+let state = { status: 'checking', user: null }
 const listeners = new Set()
 
-const emit = () => {
+const set = (next) => {
+  state = next
   for (const listener of listeners) listener()
 }
 
@@ -36,33 +23,40 @@ const subscribe = (listener) => {
   return () => listeners.delete(listener)
 }
 
-// Signing out in one tab signs out the others.
-if (typeof window !== 'undefined') {
-  window.addEventListener('storage', (e) => {
-    if (e.key !== KEY) return
-    current = read()
-    emit()
-  })
+/** Ask the server who we are. Called once at startup, and after signing in. */
+export async function refresh() {
+  try {
+    const user = await api.get('/staff/me')
+    set({ status: 'authenticated', user })
+    return user
+  } catch {
+    set({ status: 'anonymous', user: null })
+    return null
+  }
 }
 
-export function signIn(user) {
-  current = { ...user, signedInAt: Date.now() }
-  localStorage.setItem(KEY, JSON.stringify(current))
-  emit()
-  return current
+export async function signIn({ email, password }) {
+  await api.post('/staff/login', { email, password })
+  return refresh()
 }
 
-export function signOut() {
-  current = null
-  localStorage.removeItem(KEY)
-  emit()
+export async function registerVenue(payload) {
+  await api.post('/staff/register', payload)
+  return refresh()
 }
+
+export async function signOut() {
+  await api.post('/staff/logout', {}).catch(() => {})
+  set({ status: 'anonymous', user: null })
+}
+
+refresh()
 
 export function useSession() {
-  const session = useSyncExternalStore(
+  const current = useSyncExternalStore(
     subscribe,
-    () => current,
-    () => null,
+    () => state,
+    () => state,
   )
-  return { session, signIn, signOut }
+  return { ...current, signIn, signOut, registerVenue, refresh }
 }

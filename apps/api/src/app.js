@@ -8,6 +8,7 @@ import { checkin } from './routes/checkin.js'
 import { detect } from './routes/detect.js'
 import { identity } from './routes/identity.js'
 import { sessions } from './routes/sessions.js'
+import { staff } from './routes/staff.js'
 import { webauthn } from './routes/webauthn.js'
 
 /**
@@ -35,5 +36,9 @@ app.route('/detect', detect)
 app.route('/identity', identity)
 app.route('/webauthn', webauthn)
 app.route('/checkin', checkin)
+
+// The venue-facing surface. Guest routes are semi-public — a QR token is the
+// entry ticket; these need an account, and every read filters by venue.
+app.route('/staff', staff)
 
 app.onError(handleError)

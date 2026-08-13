@@ -13,7 +13,10 @@ import {
   Td,
   Th,
 } from '../components/ui'
-import { JOURNEY, STATUS, bookingById, bookings, guestById } from '../data/mock'
+import { api } from '../api'
+import Async from '../components/Async'
+import { journeyOf, statusOf } from '../labels'
+import { useApi } from '../useApi'
 
 const date = (iso) =>
   new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short' })
@@ -36,6 +39,8 @@ const FILTERS = [
 export default function BookingsPage() {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('all')
+  const { data, error, loading, reload } = useApi(() => api.get('/staff/bookings'))
+  const bookings = data?.bookings ?? []
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -46,10 +51,10 @@ export default function BookingsPage() {
           !q ||
           b.guestName.toLowerCase().includes(q) ||
           b.reference.toLowerCase().includes(q) ||
-          b.room.includes(q),
+          (b.room ?? '').includes(q),
       )
-      .sort((a, b) => b.arrival.localeCompare(a.arrival) || a.room.localeCompare(b.room))
-  }, [query, filter])
+      .sort((a, b) => b.arrival.localeCompare(a.arrival) || (a.room ?? '').localeCompare(b.room ?? ''))
+  }, [bookings, query, filter])
 
   return (
     <div>
@@ -77,11 +82,16 @@ export default function BookingsPage() {
         <SearchInput value={query} onChange={setQuery} placeholder="Name, reference or room" />
       </div>
 
+      <Async loading={loading} error={error} onRetry={reload}>
       {rows.length === 0 ? (
         <EmptyState
           icon={CalendarCheck}
-          title="Nothing matches"
-          body="Try a different filter, or search by guest name, booking reference or room number."
+          title={bookings.length ? 'Nothing matches' : 'No bookings yet'}
+          body={
+            bookings.length
+              ? 'Try a different filter, or search by guest name, booking reference or room number.'
+              : 'Reservations appear here once your property management system sends them, or when you add them by hand.'
+          }
         />
       ) : (
         <TableWrap>
@@ -112,32 +122,33 @@ export default function BookingsPage() {
                   {date(booking.arrival)} → {date(booking.departure)}
                 </Td>
                 <Td>
-                  <StatusPill tone={STATUS[booking.status].tone}>
-                    {STATUS[booking.status].label}
+                  <StatusPill tone={statusOf(booking.status).tone}>
+                    {statusOf(booking.status).label}
                   </StatusPill>
                 </Td>
-                <Td>{booking.source}</Td>
+                <Td>{booking.source ?? 'Direct'}</Td>
               </tr>
             ))}
           </tbody>
         </TableWrap>
       )}
+      </Async>
     </div>
   )
 }
 
 export function BookingDetailPage() {
   const { id } = useParams()
-  const booking = bookingById(id)
-  const guest = booking?.guestId ? guestById(booking.guestId) : null
+  const { data: booking, error, loading, reload } = useApi(
+    () => api.get(`/staff/bookings/${id}`),
+    [id],
+  )
 
-  if (!booking) {
+  if (loading || error) {
     return (
-      <EmptyState
-        icon={CalendarCheck}
-        title="Booking not found"
-        body="It may have been cancelled, or the link is out of date."
-      />
+      <Async loading={loading} error={error} onRetry={reload}>
+        {null}
+      </Async>
     )
   }
 
@@ -152,10 +163,10 @@ export function BookingDetailPage() {
 
       <PageHeader
         title={booking.guestName}
-        subtitle={`${booking.reference} · room ${booking.room}`}
+        subtitle={`${booking.reference} · room ${booking.room ?? 'unassigned'}`}
         actions={
-          <StatusPill tone={STATUS[booking.status].tone}>
-            {STATUS[booking.status].label}
+          <StatusPill tone={statusOf(booking.status).tone}>
+            {statusOf(booking.status).label}
           </StatusPill>
         }
       />
@@ -167,11 +178,11 @@ export function BookingDetailPage() {
           </h2>
           <DetailRow label="Reference">{booking.reference}</DetailRow>
           <DetailRow label="Room">
-            {booking.room} · {booking.roomType}
+            {[booking.room, booking.roomType].filter(Boolean).join(' · ') || 'not assigned'}
           </DetailRow>
           <DetailRow label="Arrival">{date(booking.arrival)}</DetailRow>
           <DetailRow label="Departure">{date(booking.departure)}</DetailRow>
-          <DetailRow label="Booked through">{booking.source}</DetailRow>
+          <DetailRow label="Booked through">{booking.source ?? 'Direct'}</DetailRow>
         </Panel>
 
         <Panel className="px-5 py-4">
@@ -181,10 +192,10 @@ export function BookingDetailPage() {
           {booking.checkedInAt ? (
             <>
               <DetailRow label="Arrived">{dateTime(booking.checkedInAt)}</DetailRow>
-              <DetailRow label="How">{JOURNEY[booking.journey].label}</DetailRow>
+              <DetailRow label="How">{journeyOf(booking.journey)?.label ?? '—'}</DetailRow>
               <DetailRow label="Verified by">Passkey on the guest's own device</DetailRow>
               <p className="mt-3 text-[12.5px] leading-relaxed text-slate-500">
-                {JOURNEY[booking.journey].hint}. ChqIn never saw a face or a
+                {journeyOf(booking.journey)?.hint}. ChqIn never saw a face or a
                 fingerprint — the phone released the passkey and we checked the
                 signature.
               </p>
@@ -209,15 +220,14 @@ export function BookingDetailPage() {
           <h2 className="mb-2 text-[13px] font-bold uppercase tracking-[0.1em] text-slate-400">
             Guest
           </h2>
-          {guest ? (
+          {booking.guestId ? (
             <>
               <DetailRow label="ChqIn identity">
-                <Link to={`/app/guests/${guest.id}`} className="text-brand hover:underline">
-                  {guest.name}
+                <Link to={`/app/guests/${booking.guestId}`} className="text-brand hover:underline">
+                  {booking.guestName}
                 </Link>
               </DetailRow>
-              <DetailRow label="Stays with you">{guest.stays}</DetailRow>
-              <DetailRow label="Devices enrolled">{guest.devices.length}</DetailRow>
+              <DetailRow label="Room">{booking.room ?? 'not assigned'}</DetailRow>
             </>
           ) : (
             <p className="py-2 text-[13.5px] text-slate-500">
