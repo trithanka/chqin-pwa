@@ -15,8 +15,13 @@ if (process.env.NODE_ENV === 'production') {
   process.exit(1)
 }
 
+// Every table with rows in it. Adding a table to the schema means adding it
+// here — otherwise "cleared" quietly leaves data behind, which is worse than
+// not clearing at all.
 const TABLES = [
   'auth_events',
+  'staff_memberships',
+  'staff_users',
   'webauthn_challenges',
   'checkins',
   'checkin_sessions',
