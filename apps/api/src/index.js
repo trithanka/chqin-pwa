@@ -1,10 +1,14 @@
 import { serve } from '@hono/node-server'
 import { app } from './app.js'
-import { config } from './config.js'
+import { config, isRemote } from './config.js'
 import { pool } from './db/client.js'
 
 const server = serve({ fetch: app.fetch, port: config.PORT }, (info) => {
+  // The database line is here because .env is toggled by hand: knowing which
+  // one you're on should not require reading a config file.
+  const { host } = new URL(config.DATABASE_URL)
   console.log(`ChqIn API on http://localhost:${info.port}  (RP ID: ${config.RP_ID})`)
+  console.log(`database → ${host}${isRemote() ? '  ⚠︎ remote' : '  (local)'}`)
 })
 
 // Drain in-flight requests and close the pool, so `node --watch` restarts and

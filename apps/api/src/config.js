@@ -1,27 +1,14 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { z } from 'zod'
 
-/**
- * Load env before anything reads it. Every entry point — the server, the
- * migration scripts, drizzle.config.js — comes through this module, so this is
- * the one place it has to happen.
- *
- * `CHQIN_ENV=supabase` loads .env.supabase *first*, and neither loadEnvFile nor
- * the shell overwrites a variable that is already set — so first write wins and
- * .env fills in whatever the named file didn't say. That matters because
- * DATABASE_URL and DIRECT_URL have to move together: switching one and not the
- * other points the app at one database while migrations hit another.
- */
-const load = (file) => {
-  try {
-    process.loadEnvFile(new URL(file, import.meta.url))
-  } catch {
-    /* absent: the next file, or the defaults below, apply */
-  }
+// Load .env before anything reads process.env. Every entry point — the server,
+// the migration scripts, drizzle.config.js — comes through this module, so this
+// is the one place it has to happen.
+try {
+  process.loadEnvFile(new URL('../.env', import.meta.url))
+} catch {
+  /* no .env file: the defaults below apply */
 }
-
-if (process.env.CHQIN_ENV) load(`../.env.${process.env.CHQIN_ENV}`)
-load('../.env')
 
 /**
  * Env, parsed once at boot. A missing RP ID or a typo'd origin should stop the

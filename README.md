@@ -244,21 +244,29 @@ npm run db:reset     # drop schemas, migrate, seed — refuses anything not loca
 
 ### Switching between local and hosted
 
-Local is the default — `.env` points at the container from `npm run db:up`.
-Hosted config lives in its own file and is opted into per command:
+[.env](apps/api/.env.example) carries both, one commented out:
 
 ```bash
-npm run dev:api                      # local container
-CHQIN_ENV=supabase npm run dev:api   # hosted, from .env.supabase
-CHQIN_ENV=supabase npm run db:migrate
+# ── LOCAL ──
+DATABASE_URL=postgres://chqin:chqin@localhost:5439/chqin
+
+# ── SUPABASE ──
+# DATABASE_URL=postgresql://…@…pooler.supabase.com:6543/postgres
+# DIRECT_URL=postgresql://…@…pooler.supabase.com:5432/postgres
 ```
 
-`CHQIN_ENV=x` loads `.env.x` *before* `.env`, and since neither the loader nor
-the shell overwrites a variable that is already set, first write wins and `.env`
-fills in the rest. The reason to switch with one flag rather than by editing a
-URL: `DATABASE_URL` and `DIRECT_URL` have to move together, and changing one
-but not the other points the app at one database while migrations hit another —
-which fails in a way that looks like data disappearing.
+**Toggle whole blocks.** `DATABASE_URL` and `DIRECT_URL` have to move together:
+switch one and not the other and the app runs against one database while
+migrations hit another, which doesn't error — it presents as data going
+missing.
+
+The API prints its database host on boot, marked `(local)` or `⚠︎ remote`, so a
+hand-edited toggle is visible rather than assumed:
+
+```
+ChqIn API on http://localhost:8787  (RP ID: localhost)
+database → aws-0-ap-southeast-1.pooler.supabase.com:6543  ⚠︎ remote
+```
 
 ### Hosted Postgres
 
