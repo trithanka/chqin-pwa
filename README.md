@@ -56,6 +56,15 @@ iterating on one and want its output clean — use `npm run dev`,
 
 Both front ends pin their ports with `strictPort`, so a stale dev server makes
 the next one fail loudly instead of quietly landing on its neighbour's port.
+When that happens — `Error: Port 5174 is already in use` — something from an
+earlier run is still holding it:
+
+```bash
+npm run dev:stop     # frees 5173, 5174 and 8787
+```
+
+It isn't wired to `predev` on purpose: a hook that kills whatever is listening
+will eventually kill a server you meant to keep.
 
 Designed at 390px. On a desktop viewport it renders inside a centred phone shell.
 

@@ -24,7 +24,8 @@
     "db:seed": "npm run db:seed --workspace @chqin/api",
     "db:reset": "npm run db:reset --workspace @chqin/api",
     "db:clear": "npm run db:clear --workspace @chqin/api",
-    "db:reseed": "npm run db:reseed --workspace @chqin/api"
+    "db:reseed": "npm run db:reseed --workspace @chqin/api",
+    "dev:stop": "lsof -ti:5173,5174,8787 -sTCP:LISTEN | xargs -r kill || true"
   },
   "devDependencies": {
     "concurrently": "^10.0.4",
