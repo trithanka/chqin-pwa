@@ -24,7 +24,7 @@ const STEPS = [
   { key: 'property', label: 'Property details', Screen: PropertyStep },
   { key: 'rooms', label: 'Rooms', Screen: RoomsStep },
   { key: 'team', label: 'Team', Screen: TeamStep },
-  { key: 'qr', label: 'Check-in QR', Screen: QrStep },
+  { key: 'qr', label: 'Check-in QR', Screen: (props) => <QrStep {...props} preview /> },
   { key: 'live', label: 'Go live', Screen: LiveStep, final: true },
 ]
 

@@ -44,12 +44,14 @@ export function read(token) {
 /**
  * `secure` has to be off over plain http or the browser silently drops the
  * cookie — which looks exactly like a broken session: login returns 200, the
- * next request is 401.
+ * next request is 401. SameSite=None has the same symptom for a different
+ * reason, and browsers require Secure alongside it.
  */
 export const cookieOptions = () => ({
   httpOnly: true,
-  sameSite: 'Lax',
-  secure: isRemote() || process.env.NODE_ENV === 'production',
+  sameSite: config.COOKIE_SAMESITE,
+  secure:
+    config.COOKIE_SAMESITE === 'None' || isRemote() || process.env.NODE_ENV === 'production',
   path: '/',
   maxAge: MAX_AGE_SECONDS,
 })

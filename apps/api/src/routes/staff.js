@@ -5,6 +5,7 @@ import { body } from '../lib/validate.js'
 import { unauthorized } from '../lib/errors.js'
 import { COOKIE, cookieOptions, issue, read } from '../lib/session.js'
 import {
+  checkinCode,
   getBooking,
   getGuest,
   listBookings,
@@ -93,6 +94,8 @@ const venueOf = (c) => c.get('session').venueId
 staff.get('/me', async (c) => c.json(await profile(c.get('session'))))
 
 staff.get('/overview', async (c) => c.json(await overview(venueOf(c))))
+
+staff.get('/checkin-code', async (c) => c.json(await checkinCode(venueOf(c))))
 
 staff.get('/bookings', async (c) => c.json({ bookings: await listBookings(venueOf(c)) }))
 

@@ -36,6 +36,13 @@
       "when": 1786602445558,
       "tag": "0004_staff",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786730181068,
+      "tag": "0005_desk_token",
+      "breakpoints": true
     }
   ]
 }

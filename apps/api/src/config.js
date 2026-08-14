@@ -39,6 +39,18 @@ const schema = z.object({
   // database's CA certificate directly instead.
   PG_CA_CERT: z.string().optional(),
 
+  /**
+   * The staff session cookie's SameSite attribute.
+   *
+   * 'Lax' is right when the API shares a site with the dashboard
+   * (api.chqin.in ↔ business.chqin.in). If the API lives somewhere else —
+   * onrender.com, say — the cookie is third-party and Lax means the browser
+   * never sends it: login succeeds and every request after it is 401.
+   * 'None' allows that, at the cost of relying on third-party cookies, which
+   * Safari already blocks and Chrome is phasing out.
+   */
+  COOKIE_SAMESITE: z.enum(['Lax', 'Strict', 'None']).default('Lax'),
+
   CHALLENGE_TTL_MS: z.coerce.number().default(120_000),
   SESSION_TTL_MS: z.coerce.number().default(300_000),
 })

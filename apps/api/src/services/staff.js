@@ -1,7 +1,8 @@
-import { and, count, desc, eq, inArray, sql } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm'
 import { db, transaction } from '../db/client.js'
 import {
   bookings,
+  checkinSessions,
   checkins,
   credentials,
   guests,
@@ -11,7 +12,7 @@ import {
   staffUsers,
   venues,
 } from '../db/schema/index.js'
-import { lookupHash } from '../lib/crypto.js'
+import { newSessionToken, lookupHash, tokenHash } from '../lib/crypto.js'
 import { hashPassword, verifyPassword } from '../lib/passwords.js'
 import { conflict, notFound, unauthorized } from '../lib/errors.js'
 
@@ -167,6 +168,42 @@ export async function getBooking(venueId, id) {
   )
   if (!row) throw notFound('No such booking here.')
   return row
+}
+
+/**
+ * The venue's check-in code — the one printed on the desk card.
+ *
+ * Created on first ask and returned unchanged after that, because the card is
+ * printed: a code that rotated on every visit would invalidate the card
+ * already sitting on the counter.
+ */
+export async function checkinCode(venueId) {
+  const [existing] = await db
+    .select({ token: checkinSessions.token })
+    .from(checkinSessions)
+    .where(
+      and(
+        eq(checkinSessions.venueId, venueId),
+        eq(checkinSessions.kind, 'desk'),
+        eq(checkinSessions.status, 'open'),
+        isNotNull(checkinSessions.token),
+      ),
+    )
+    .limit(1)
+
+  if (existing?.token) return { token: existing.token }
+
+  const token = newSessionToken()
+  await db.insert(checkinSessions).values({
+    venueId,
+    token,
+    tokenHash: tokenHash(token),
+    kind: 'desk',
+    // A printed card doesn't expire on a timer; it's revoked or reprinted.
+    expiresAt: new Date(Date.now() + 3650 * 86_400_000),
+  })
+
+  return { token }
 }
 
 /** Today's arrivals plus the counts a desk actually watches. */

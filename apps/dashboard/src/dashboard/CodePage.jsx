@@ -1,5 +1,8 @@
 import { PageHeader } from '../components/ui'
+import Async from '../components/Async'
 import QrStep from '../onboarding/steps/QrStep'
+import { api } from '../api'
+import { useApi } from '../useApi'
 import { useSession } from '../session'
 
 /**
@@ -8,6 +11,7 @@ import { useSession } from '../session'
  */
 export default function CodePage() {
   const { user } = useSession()
+  const { data, error, loading, reload } = useApi(() => api.get('/staff/checkin-code'))
 
   return (
     <div>
@@ -15,7 +19,12 @@ export default function CodePage() {
         title="Check-in code"
         subtitle="One code for the whole property. Each scan starts a separate, private check-in."
       />
-      <QrStep data={{ property: { name: user?.venue?.name ?? 'Your property' } }} />
+      <Async loading={loading} error={error} onRetry={reload}>
+        <QrStep
+          data={{ property: { name: user?.venue?.name ?? 'Your property' } }}
+          token={data?.token}
+        />
+      </Async>
     </div>
   )
 }

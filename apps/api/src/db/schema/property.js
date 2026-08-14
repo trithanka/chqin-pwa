@@ -112,6 +112,11 @@ export const checkinSessions = pgTable(
     parentId: uuid('parent_id').references(() => checkinSessions.id),
     // Hashed, so a database leak isn't a ring of working keys.
     tokenHash: bytea('token_hash').notNull(),
+    // Desk QRs only, and deliberately in the clear: the card sits on a counter
+    // where anyone can photograph it, so its secrecy was never the control —
+    // and a card you can't reprint because the server forgot the token is a
+    // card you have to replace. Booking and kiosk tokens stay hash-only.
+    token: text('token'),
     kind: text('kind').notNull(), // desk | booking | kiosk
     status: text('status').notNull().default('open'),
     // Recorded at detection, because enrolment changes the state it was

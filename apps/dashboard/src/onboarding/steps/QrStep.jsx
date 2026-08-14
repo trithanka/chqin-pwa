@@ -5,35 +5,28 @@ import { Button, Panel } from '../../components/ui'
 import StepHeader from '../../components/StepHeader'
 import Logo from '../../components/Logo'
 
+// Where the guest app lives, not where the dashboard does — the printed card
+// sends a guest to check in. Hardcoding it means a card printed from staging
+// points at production, or the reverse.
+const guestApp = import.meta.env.VITE_GUEST_APP_URL ?? window.location.origin
+
 /**
- * The desk card. One QR per property, printed once and left on the counter —
- * it identifies the hotel, and each scan mints that guest their own check-in
+ * The desk card. One code per property, printed once and left on the counter —
+ * it identifies the venue, and each scan mints that guest their own check-in
  * session, so the printed code never has to be reissued.
  *
- * The token here is a local placeholder; the real one comes from the API when
- * this is wired up.
+ * `token` comes from the API. During setup there isn't one yet, so the card
+ * renders as an obvious preview: a QR that looks scannable but resolves to
+ * nothing is worse than one that admits it.
  */
-export default function QrStep({ data }) {
+export default function QrStep({ data, token, preview = false }) {
   const [png, setPng] = useState(null)
   const [copied, setCopied] = useState(false)
 
-  const token = useMemo(
-    () =>
-      // Stable for a given property name so the card doesn't change on every
-      // keystroke or re-render.
-      'demo-' +
-      Array.from(data.property.name || 'chqin')
-        .reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7)
-        .toString(36)
-        .padStart(8, '0'),
-    [data.property.name],
+  const url = useMemo(
+    () => `${guestApp}/c/${token ?? 'preview'}`,
+    [token],
   )
-
-  // Where the guest app lives, not where the dashboard does — the printed card
-  // sends a guest to check in. Hardcoding it means a card printed from a
-  // staging dashboard points at production, or the reverse.
-  const guestApp = import.meta.env.VITE_GUEST_APP_URL ?? window.location.origin
-  const url = `${guestApp}/c/${token}`
 
   useEffect(() => {
     let cancelled = false
@@ -78,11 +71,20 @@ export default function QrStep({ data }) {
           Point your phone camera at the code
         </p>
 
-        <div className="my-6 rounded-2xl border border-slate-200 bg-white p-3">
+        <div className="relative my-6 rounded-2xl border border-slate-200 bg-white p-3">
           {png ? (
-            <img src={png} alt={`Check-in QR code for ${data.property.name}`} className="size-44" />
+            <img
+              src={png}
+              alt={`Check-in QR code for ${data.property.name}`}
+              className={`size-44 ${preview ? 'opacity-25 blur-[1px]' : ''}`}
+            />
           ) : (
             <div className="size-44 animate-pulse rounded-lg bg-slate-100" />
+          )}
+          {preview && (
+            <span className="absolute inset-0 grid place-items-center px-4 text-center text-[12px] font-semibold leading-snug text-slate-500">
+              Your code is created when you go live
+            </span>
           )}
         </div>
 
@@ -94,19 +96,33 @@ export default function QrStep({ data }) {
 
       <div className="print-hide mt-6 flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2.5">
-          <Button tone="secondary" icon={Printer} onClick={() => window.print()}>
+          <Button
+            tone="secondary"
+            icon={Printer}
+            onClick={() => window.print()}
+            disabled={preview}
+          >
             Print card
           </Button>
-          <Button tone="ghost" icon={copied ? Check : Copy} onClick={copy}>
+          <Button tone="ghost" icon={copied ? Check : Copy} onClick={copy} disabled={preview}>
             {copied ? 'Link copied' : 'Copy link'}
           </Button>
         </div>
 
         <p className="text-[12.5px] leading-relaxed text-slate-500">
-          Guests without a camera app can open{' '}
-          <span className="font-semibold text-slate-700">{url}</span> directly. The
-          code stays valid — revoke and reprint it from settings if a card ever
-          goes missing.
+          {preview ? (
+            <>
+              This is how the card will look. The real code appears on your
+              dashboard as soon as setup is finished.
+            </>
+          ) : (
+            <>
+              Guests without a camera app can open{' '}
+              <span className="font-semibold text-slate-700">{url}</span>{' '}
+              directly. The same code stays valid, so a printed card keeps
+              working.
+            </>
+          )}
         </p>
       </div>
     </div>
