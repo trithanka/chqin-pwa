@@ -1,25 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 import { KeyRound } from 'lucide-react'
-import { BiometricPromptSheet, PrimaryButton, Screen, ScreenTitle } from '../components/ui'
+import { PrimaryButton, Screen, ScreenTitle } from '../components/ui'
 import { BiometricCard } from '../components/cards'
-import { createPasskey as createWebAuthnPasskey, isCancellation, passkeyMode, unsupportedReason } from '../passkey'
+import { isCancellation, passkeyMode, unsupportedReason } from '../passkey'
 
 /**
- * Passkey creation. Where WebAuthn can run, this is the real ceremony — the
- * OS creates the credential and the device biometric authorises it, and ChqIn keeps only
- * the credential ID and public key. Where it can't (insecure context, no
- * platform authenticator) the simulated sheet stands in so the flow still
- * demos.
+ * Passkey creation, and the last step of the first-time and new-device paths.
+ *
+ * The credential is made by the platform against options the server issued,
+ * and the server verifies it — so reaching the next screen means a check-in
+ * actually exists, not that an animation finished.
  */
-export default function SecureDeviceScreen({ next, activeMode, createPasskey, ensureIdentity, guestName }) {
-  const [mode, setMode] = useState(null) // null while probing | 'webauthn' | 'simulated'
-  const [sheetOpen, setSheetOpen] = useState(false)
-  const [secured, setSecured] = useState(false)
-  const [busy, setBusy] = useState(false)
+export default function SecureDeviceScreen({ next, activeMode, runEnrolment }) {
+  const [mode, setMode] = useState(null) // null while probing
+  const [state, setState] = useState('idle') // 'idle' | 'working' | 'done'
   const [note, setNote] = useState(null)
-  // The simulated sheet completes from an animation callback — guard against a
-  // second fire minting a second credential for one device.
-  const registered = useRef(false)
+  // The OS sheet can resolve twice on some platforms; a second enrolment would
+  // mint a second credential for one device.
+  const running = useRef(false)
 
   useEffect(() => {
     passkeyMode().then((m) => {
@@ -28,43 +26,29 @@ export default function SecureDeviceScreen({ next, activeMode, createPasskey, en
     })
   }, [])
 
-  const finish = (passkey) => {
-    if (registered.current) return
-    registered.current = true
-    createPasskey(passkey)
-    setSecured(true)
-    setTimeout(next, 500)
-  }
-
-  const handleEnable = async () => {
-    if (secured || busy) return
-
-    if (mode === 'simulated') {
-      setSheetOpen(true)
-      return
-    }
-
-    setBusy(true)
+  const enrol = async () => {
+    if (state !== 'idle' || running.current) return
+    running.current = true
+    setState('working')
     setNote(null)
+
     try {
-      const identity = ensureIdentity()
-      const passkey = await createWebAuthnPasskey({
-        identityId: identity.id,
-        guestName,
-      })
-      finish(passkey)
+      await runEnrolment()
+      setState('done')
+      setTimeout(next, 500)
     } catch (err) {
-      if (isCancellation(err)) {
-        setNote('Unlock was dismissed. Tap to try again.')
-      } else {
-        // A broken ceremony shouldn't strand a guest mid-check-in.
-        setNote('Passkey creation failed on this device — using a simulated passkey.')
-        setMode('simulated')
-      }
+      setState('idle')
+      setNote(
+        isCancellation(err)
+          ? 'Unlock was dismissed. Tap to try again.'
+          : (err.message ?? 'That didn’t work. Try again.'),
+      )
     } finally {
-      setBusy(false)
+      running.current = false
     }
   }
+
+  const blocked = mode === 'simulated'
 
   return (
     <Screen className="justify-between pt-7 pb-8 px-7">
@@ -76,14 +60,14 @@ export default function SecureDeviceScreen({ next, activeMode, createPasskey, en
 
         <div className="my-auto py-8">
           <BiometricCard
-            state={secured ? 'done' : busy || sheetOpen ? 'scanning' : 'idle'}
-            onClick={handleEnable}
+            state={state === 'done' ? 'done' : state === 'working' ? 'scanning' : 'idle'}
+            onClick={enrol}
           />
         </div>
 
-        <div className="h-8 text-center">
+        <div className="h-10 text-center">
           {note && (
-            <p className="mx-auto max-w-[290px] text-[12.5px] leading-snug font-medium text-slate-400">
+            <p className="mx-auto max-w-[290px] text-[12.5px] leading-relaxed font-medium text-slate-400">
               {note}
             </p>
           )}
@@ -92,23 +76,22 @@ export default function SecureDeviceScreen({ next, activeMode, createPasskey, en
 
       <div className="pt-6">
         <PrimaryButton
-          onClick={handleEnable}
-          loading={busy || mode === null}
-          icon={secured ? undefined : KeyRound}
-          tone={secured ? 'success' : 'brand'}
+          onClick={enrol}
+          loading={state === 'working' || mode === null}
+          disabled={blocked}
+          icon={state === 'done' ? undefined : KeyRound}
+          tone={state === 'done' ? 'success' : 'brand'}
         >
-          {secured ? 'Passkey created' : 'Create passkey'}
+          {state === 'done' ? 'Passkey created' : 'Create passkey'}
         </PrimaryButton>
-      </div>
 
-      <BiometricPromptSheet
-        open={sheetOpen}
-        onComplete={() => {
-          setSheetOpen(false)
-          finish({ real: false })
-        }}
-        title="Create Passkey"
-      />
+        {blocked && (
+          <p className="mt-3 text-center text-[12px] leading-relaxed text-slate-400">
+            Check-in needs a passkey, so the desk will have to finish this one
+            by hand.
+          </p>
+        )}
+      </div>
     </Screen>
   )
 }

@@ -2,7 +2,6 @@ import { motion } from 'framer-motion'
 import { ArrowRight, Building2, Fingerprint, Lock, QrCode, UserCheck } from 'lucide-react'
 import { IconButton, PrimaryButton, Screen } from '../components/ui'
 import Logo from '../components/Logo'
-import { GUEST, HOTEL } from '../data'
 
 /**
  * The WELCOME beat. `activeMode` arrives already decided by detection — this
@@ -30,9 +29,14 @@ const COPY = {
   },
 }
 
-export default function HotelWelcomeScreen({ next, activeMode, onRescan }) {
+export default function HotelWelcomeScreen({ next, activeMode, session, onRescan }) {
   const mode = activeMode || 'firstTime'
   const copy = COPY[mode]
+  const venue = session?.venue
+  const booking = session?.booking
+  // The server greets a returning guest by name; a first-timer has no name to
+  // greet with, and the booking's name is a reservation, not an identity.
+  const greeting = session?.greetingName
 
   return (
     <Screen className="justify-between pt-safe pb-7 px-6 bg-white sm:pt-6">
@@ -49,7 +53,7 @@ export default function HotelWelcomeScreen({ next, activeMode, onRescan }) {
         {/* Eyebrow header & thin divider */}
         <div className="space-y-1">
           <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-blue-600">
-            {HOTEL.name.toUpperCase()}
+            {(venue?.name ?? 'Checking in').toUpperCase()}
           </p>
           <div className="h-[1px] w-full bg-slate-100 my-1.5" />
           <p className="text-[12.5px] font-semibold text-slate-400">
@@ -74,7 +78,9 @@ export default function HotelWelcomeScreen({ next, activeMode, onRescan }) {
             transition={{ delay: 0.04 }}
             className="text-[16.5px] font-medium leading-snug text-slate-500 space-y-0.5"
           >
-            <p className="text-slate-800 font-semibold">{copy.lines[0]}</p>
+            <p className="text-slate-800 font-semibold">
+              {greeting && mode !== 'firstTime' ? greeting : copy.lines[0]}
+            </p>
             {copy.lines[1] && <p className="text-slate-500">{copy.lines[1]}</p>}
           </motion.div>
         </div>
@@ -85,21 +91,25 @@ export default function HotelWelcomeScreen({ next, activeMode, onRescan }) {
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.22),transparent_70%)]" />
 
             <div className="relative z-10 flex items-center justify-between">
-              <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-0.5 text-[10.5px] font-semibold text-white backdrop-blur-md">
-                <Building2 size={11} strokeWidth={2} />
-                {HOTEL.location}
-              </span>
-              {mode !== 'firstTime' && (
+              {venue?.location && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-0.5 text-[10.5px] font-semibold text-white backdrop-blur-md">
+                  <Building2 size={11} strokeWidth={2} />
+                  {venue.location}
+                </span>
+              )}
+              {booking?.guestName && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 text-[10.5px] font-semibold text-white backdrop-blur-md">
-                  <UserCheck size={11} /> {GUEST.name}
+                  <UserCheck size={11} /> {booking.guestName}
                 </span>
               )}
             </div>
 
             <div className="relative z-10">
-              <p className="text-[10.5px] font-bold uppercase tracking-wider text-blue-200">Assigned Room</p>
+              <p className="text-[10.5px] font-bold uppercase tracking-wider text-blue-200">
+                {booking?.roomNumber ? 'Assigned room' : 'Your stay'}
+              </p>
               <h2 className="text-[19px] font-extrabold text-white tracking-tight">
-                Deluxe Room · {HOTEL.roomNumber}
+                {booking?.roomNumber ? `Room ${booking.roomNumber}` : (venue?.name ?? 'Check in')}
               </h2>
             </div>
           </div>

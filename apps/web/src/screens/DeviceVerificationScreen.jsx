@@ -1,83 +1,62 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Check, Fingerprint } from 'lucide-react'
-import { BiometricPromptSheet, PrimaryButton, Screen, ScreenTitle } from '../components/ui'
+import { PrimaryButton, Screen, ScreenTitle } from '../components/ui'
 import { BiometricCard } from '../components/cards'
-import { assertPasskey, isCancellation, passkeyMode, unsupportedReason } from '../passkey'
+import { isCancellation, passkeyMode, unsupportedReason } from '../passkey'
 
 /**
- * Returning guest. The phone's biometric releases the passkey; the passkey
- * signs a fresh challenge; ChqIn checks the proof against the stored public
- * key. No password, no OTP, and no face recognition of our own — the biometric
- * never leaves the OS.
+ * Returning guest. The phone's unlock releases the passkey, the passkey signs
+ * the server's challenge, and the server checks it — this screen never sees
+ * whether the proof was good, only what the server says about it.
  */
-export default function DeviceVerificationScreen({ next, verifyPasskey, credentialReal }) {
-  const [mode, setMode] = useState(null) // null while probing | 'webauthn' | 'simulated'
-  const [sheetOpen, setSheetOpen] = useState(false)
+export default function DeviceVerificationScreen({
+  next,
+  runAuthentication,
+  fallBackToNewDevice,
+}) {
+  const [mode, setMode] = useState(null)
   const [state, setState] = useState('idle') // 'idle' | 'verifying' | 'verified'
   const [note, setNote] = useState(null)
-
-  // The ceremony has to match the credential that's actually enrolled. A
-  // simulated credential can't answer a real `get()` — that throws
-  // NotAllowedError and would loop forever on "try again".
-  const useReal = mode === 'webauthn' && credentialReal
 
   useEffect(() => {
     passkeyMode().then((m) => {
       setMode(m)
-      if (m === 'simulated') {
-        setNote(
-          credentialReal
-            ? // Honest about it: the local record is standing in for a proof
-              // this context can't produce.
-              `${unsupportedReason()} Falling back to the simulated check.`
-            : unsupportedReason(),
-        )
-      } else if (!credentialReal) {
-        // Capable device, but the enrolled passkey was simulated — say so,
-        // otherwise the fake sheet looks like broken device unlock.
-        setNote(
-          'This passkey was enrolled in simulated mode, so your device can’t unlock it. Reset everything on the scan screen to enrol a real one.',
-        )
-      }
+      if (m === 'simulated') setNote(unsupportedReason())
     })
-  }, [credentialReal])
+  }, [])
 
-  const settle = async (assertion) => {
-    // The OS released the passkey — now ChqIn verifies the signed challenge.
-    const ok = await verifyPasskey(assertion)
-    if (!ok) {
-      setState('idle')
-      return
-    }
-    setState('verified')
-    setTimeout(next, 600)
-  }
-
-  const handleVerify = async () => {
+  const verify = async () => {
     if (state !== 'idle') return
-
-    if (!useReal) {
-      setSheetOpen(true)
-      setState('verifying')
-      return
-    }
-
     setState('verifying')
     setNote(null)
+
     try {
-      const assertion = await assertPasskey()
-      await settle(assertion)
+      await runAuthentication()
+      setState('verified')
+      setTimeout(next, 600)
     } catch (err) {
       setState('idle')
+
       if (isCancellation(err)) {
         setNote('Unlock was dismissed. Tap to try again.')
-      } else {
-        setNote('This device couldn’t use its passkey — using the simulated check.')
-        setMode('simulated')
+        return
       }
+
+      // The server didn't recognise this passkey — it may have been revoked,
+      // or this device was restored from a backup. Re-enrolling is the way
+      // out, not repeating a ceremony that will keep failing.
+      if (['unknown_credential', 'unverified', 'counter'].includes(err.code)) {
+        setNote('This device needs setting up again — one moment.')
+        setTimeout(fallBackToNewDevice, 1200)
+        return
+      }
+
+      setNote(err.message ?? 'That didn’t work. Try again.')
     }
   }
+
+  const blocked = mode === 'simulated'
 
   return (
     <Screen className="justify-between pt-7 pb-8 px-7">
@@ -90,11 +69,11 @@ export default function DeviceVerificationScreen({ next, verifyPasskey, credenti
         <div className="my-auto py-8">
           <BiometricCard
             state={state === 'verified' ? 'done' : state === 'verifying' ? 'scanning' : 'idle'}
-            onClick={handleVerify}
+            onClick={verify}
           />
         </div>
 
-        <div className="h-8 flex items-center justify-center">
+        <div className="flex h-10 items-center justify-center">
           <AnimatePresence mode="wait">
             {state === 'verifying' && (
               <motion.div
@@ -130,7 +109,7 @@ export default function DeviceVerificationScreen({ next, verifyPasskey, credenti
                 key="note"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="mx-auto max-w-[290px] text-center text-[12.5px] leading-snug font-medium text-slate-400"
+                className="mx-auto max-w-[290px] text-center text-[12.5px] leading-relaxed font-medium text-slate-400"
               >
                 {note}
               </motion.p>
@@ -141,23 +120,15 @@ export default function DeviceVerificationScreen({ next, verifyPasskey, credenti
 
       <div className="pt-6">
         <PrimaryButton
-          onClick={handleVerify}
+          onClick={verify}
           loading={state === 'verifying' || mode === null}
+          disabled={blocked}
           icon={state === 'idle' ? Fingerprint : undefined}
           tone={state === 'verified' ? 'success' : 'brand'}
         >
           {state === 'verified' ? 'Verified' : 'Unlock to check in'}
         </PrimaryButton>
       </div>
-
-      <BiometricPromptSheet
-        open={sheetOpen}
-        onComplete={() => {
-          setSheetOpen(false)
-          settle(null)
-        }}
-        title="Unlock to continue"
-      />
     </Screen>
   )
 }

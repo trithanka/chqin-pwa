@@ -6,7 +6,18 @@ import { PrimaryButton } from '../components/ui'
 import { useQrCamera } from '../useCamera'
 
 /**
- * The SCAN beat — a live rear camera looking for the hotel's QR code.
+ * A desk card encodes a URL, so the scanned value is usually
+ * https://app.chqin.com/c/<token> rather than a bare token. Accept both.
+ */
+const tokenFrom = (value) => {
+  if (!value) return null
+  const path = value.match(/\/c\/([A-Za-z0-9_-]{16,128})/)
+  if (path) return path[1]
+  return /^[A-Za-z0-9_-]{16,128}$/.test(value.trim()) ? value.trim() : null
+}
+
+/**
+ * The SCAN beat — a live rear camera looking for the venue's QR code.
  *
  * Decoding needs both a secure context and `BarcodeDetector`; where either is
  * missing the camera still runs and "Continue without scanning" resolves the
@@ -15,23 +26,22 @@ import { useQrCamera } from '../useCamera'
  * The prototype controls below are device-state switches, not journey
  * pickers — detection still decides what the guest sees.
  */
-export default function ScanScreen({ onScanned, onForgetDevice, onResetAll }) {
-  const [found, setFound] = useState(false)
+export default function ScanScreen({ onToken, onForgetDevice }) {
+  const [found, setFound] = useState(null)
 
-  const handleDecode = useCallback(() => setFound(true), [])
-  const { status, reason, videoRef, start, resolveManually } = useQrCamera({
-    onDecode: handleDecode,
-  })
+  // The decoded value is the session token — the thing the whole flow hangs
+  // off. It used to be thrown away and the app pretended to know the hotel.
+  const handleDecode = useCallback((value) => setFound(tokenFrom(value)), [])
+  const { status, reason, videoRef, start } = useQrCamera({ onDecode: handleDecode })
 
-  // Hold the confirmation beat for a moment, then hand over to detection.
+  // Hold the confirmation beat, then start the session.
   useEffect(() => {
     if (!found) return
-    const t = setTimeout(onScanned, 700)
+    const t = setTimeout(() => onToken(found), 700)
     return () => clearTimeout(t)
-  }, [found, onScanned])
+  }, [found, onToken])
 
   const showVideo = status === 'live' || status === 'requesting'
-  const blocked = status === 'denied' || status === 'unavailable'
 
   return (
     <motion.div
@@ -104,7 +114,7 @@ export default function ScanScreen({ onScanned, onForgetDevice, onResetAll }) {
       {/* Camera status line */}
       <div className="mt-4 h-8 text-center">
         {found ? (
-          <p className="text-[12.5px] font-semibold text-emerald-400">QR code recognised</p>
+          <p className="text-[12.5px] font-semibold text-emerald-400">Code recognised</p>
         ) : (
           reason && (
             <p className="mx-auto max-w-[280px] text-[12px] leading-snug font-medium text-zinc-400">
@@ -126,16 +136,16 @@ export default function ScanScreen({ onScanned, onForgetDevice, onResetAll }) {
           </PrimaryButton>
         ) : (
           <PrimaryButton
-            onClick={resolveManually}
-            disabled={found}
+            onClick={start}
+            disabled={Boolean(found) || status === 'live'}
             icon={found ? undefined : QrCode}
-            tone={found ? 'success' : blocked ? 'brand' : 'dark'}
+            tone={found ? 'success' : 'dark'}
           >
-            {found ? 'Hotel Aurora' : 'Continue without scanning'}
+            {found ? 'Code recognised' : status === 'live' ? 'Looking for a code…' : 'Try again'}
           </PrimaryButton>
         )}
 
-        <div className="mt-5 flex items-center justify-center gap-3 text-[11px] font-semibold text-zinc-500">
+        <div className="mt-5 flex items-center justify-center text-[11px] font-semibold text-zinc-500">
           <button
             type="button"
             onClick={onForgetDevice}
@@ -143,18 +153,10 @@ export default function ScanScreen({ onScanned, onForgetDevice, onResetAll }) {
           >
             Forget this device
           </button>
-          <span className="text-zinc-700">·</span>
-          <button
-            type="button"
-            onClick={onResetAll}
-            className="transition-colors hover:text-zinc-300"
-          >
-            Reset everything
-          </button>
         </div>
 
         <p className="mt-3 text-center text-[11px] text-zinc-600">
-          Live camera · simulated passkeys
+          Or open the link printed on the card
         </p>
       </div>
     </motion.div>

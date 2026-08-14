@@ -15,13 +15,15 @@ actual photo of the guest's ID. That photo is never read, uploaded or stored —
 it's a data URL held in component state for the length of the animation, and
 "Reading document…" is a timer.
 
-**Passkeys are real WebAuthn** where the platform can run it
-([apps/web/src/passkey.js](apps/web/src/passkey.js)) — a discoverable, device-bound credential
-created and asserted by the real platform authenticator, and a real ES256
-signature check via WebCrypto. What isn't real is the *verifier*: with no
-backend the page checks its own challenge, which is a demo, not a security
-boundary. Identity records still live in localStorage
-([apps/web/src/identity.js](apps/web/src/identity.js)).
+**Passkeys are real WebAuthn, verified by the server.** The platform creates
+and asserts a discoverable, device-bound credential against options the API
+issued, and the API checks the signature against the stored public key. The
+client no longer verifies anything — it used to check its own proof, which
+demonstrated the architecture and secured nothing.
+
+**A QR usually arrives as a link.** Phone cameras open URLs rather than handing
+the value to our app, so `/c/<token>` starts the same flow as an in-app scan,
+and the token is stripped from the address bar once used.
 
 **The camera needs a secure context** — `https://` or `localhost`. Over a plain
 `http://` LAN IP the API is absent entirely, so both screens say so and fall
@@ -82,9 +84,9 @@ WebAuthn RP ID and the origin check trivially correct.
 | [packages/shared/](packages/shared/) | The contract both sides validate against (zod) |
 | [docs/data-model.md](docs/data-model.md) | Why the schema looks the way it does |
 
-**The PWA does not talk to the API yet.** It still runs entirely on
-localStorage — the two halves exist and both work, but wiring the client to the
-server is the next step.
+**Both apps talk to the API.** The guest PWA resolves a scanned token to a
+session, the server decides the journey and verifies every ceremony, and a
+check-in exists only because the server wrote one.
 
 ## PWA
 

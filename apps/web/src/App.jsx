@@ -15,16 +15,16 @@ import DeviceVerificationScreen from './screens/DeviceVerificationScreen'
 import IdentityVerificationScreen from './screens/IdentityVerificationScreen'
 import SecureDeviceScreen from './screens/SecureDeviceScreen'
 import SuccessScreen from './screens/SuccessScreen'
-import { SESSION } from './data'
+import { forgetDevice } from './device'
 import {
   authenticate,
-  createIdentity,
-  detect,
-  forgetDevice,
-  registerCredential,
-  resetAll,
-} from './identity'
-import { verifyAssertion } from './passkey'
+  clearTokenFromLocation,
+  completeCheckin,
+  enrolDevice,
+  start,
+  tokenFromLocation,
+  verifyIdentity,
+} from './checkin'
 
 /* ------------------------------------------------------------------ */
 /* Flow definitions — derived for step progress                       */
@@ -51,17 +51,18 @@ const FLOWS = {
 }
 
 const HELP = {
-  hotelWelcome: 'Confirm the hotel details match your booking. ChqIn works out the rest from your device.',
-  deviceVerify: 'Whatever unlocks your phone — Face ID, Touch ID or fingerprint — releases the passkey stored on this device. ChqIn only ever sees the signed proof.',
+  hotelWelcome: 'Confirm the details match your booking. ChqIn works out the rest from your device.',
+  deviceVerify: 'Whatever unlocks your phone releases the passkey stored on it. ChqIn only ever sees the signed proof.',
   identity: 'Lay your government ID flat in good light inside the frame. This is a one-time step.',
   secureDevice: 'Creates a passkey for this device, protected by your phone’s own unlock. The private key never leaves your phone.',
-  done: 'Check-in is complete! Enjoy your stay at Hotel Aurora.',
+  done: 'Check-in is complete. Enjoy your stay.',
 }
 
 export default function App() {
-  // 'scan' → the QR beat. 'flow' → the detected check-in journey.
+  // 'scan' → waiting for a QR. 'flow' → a live session with the server.
   const [phase, setPhase] = useState('scan')
-  const [detection, setDetection] = useState({ mode: 'firstTime', identity: null, credential: null })
+  const [session, setSession] = useState(null)
+  const [checkin, setCheckin] = useState(null)
   const [stepIndex, setStepIndex] = useState(0)
   const [helpOpen, setHelpOpen] = useState(false)
   const [exitOpen, setExitOpen] = useState(false)
@@ -73,25 +74,44 @@ export default function App() {
   const showToast = useCallback((message) => {
     clearTimeout(toastTimer.current)
     setToast({ id: Date.now(), message })
-    toastTimer.current = setTimeout(() => setToast(null), 2600)
+    toastTimer.current = setTimeout(() => setToast(null), 3200)
   }, [])
 
-  const activeMode = detection.mode
+  const activeMode = session?.journey ?? 'firstTime'
   const currentFlowSteps = FLOWS[activeMode]
   const step = currentFlowSteps[stepIndex]
 
   /* -------------------------------------------------------------- */
-  /* Detection — the guest never chooses a journey                   */
+  /* Starting a session                                              */
   /* -------------------------------------------------------------- */
 
-  const handleScanned = useCallback(() => {
-    setDetection(detect(SESSION))
-    setStepIndex(0)
-    setPhase('flow')
-  }, [])
+  const begin = useCallback(
+    async (token) => {
+      const started = await start(token)
+      clearTokenFromLocation()
+      setSession(started)
+      setStepIndex(0)
+      setPhase('flow')
+      return started
+    },
+    [],
+  )
+
+  // A QR opened by the phone's camera app arrives as /c/<token> rather than
+  // through our scanner, so that path starts the same conversation.
+  useEffect(() => {
+    const token = tokenFromLocation()
+    if (!token) return
+    begin(token).catch((err) => {
+      clearTokenFromLocation()
+      showToast(err.message)
+    })
+  }, [begin, showToast])
 
   const reset = useCallback(() => {
     setPhase('scan')
+    setSession(null)
+    setCheckin(null)
     setStepIndex(0)
     setExitOpen(false)
   }, [])
@@ -104,83 +124,53 @@ export default function App() {
   }
 
   /* -------------------------------------------------------------- */
-  /* Simulated passkey operations                                    */
+  /* The steps, each one a call to the server                        */
   /* -------------------------------------------------------------- */
 
+  /** Records the one-time check and returns the id enrolment needs. */
+  const runIdentityCheck = useCallback(async () => {
+    const { verificationId } = await verifyIdentity(session.sessionId)
+    setSession((s) => ({ ...s, verificationId }))
+    return verificationId
+  }, [session])
+
+  /** Enrol this device, then finish. First-time and new-device end here. */
+  const runEnrolment = useCallback(async () => {
+    await enrolDevice(session.sessionId, session.verificationId ?? null)
+    const result = await completeCheckin(session.sessionId, session.idempotencyKey)
+    setCheckin(result)
+  }, [session])
+
+  /** Prove an existing passkey, then finish. */
+  const runAuthentication = useCallback(async () => {
+    await authenticate(session.sessionId)
+    const result = await completeCheckin(session.sessionId, session.idempotencyKey)
+    setCheckin(result)
+  }, [session])
+
   /**
-   * Returning guest: the device passkey signs a challenge, ChqIn checks the
-   * proof. `assertion` comes from the real ceremony, or is null when the
-   * screen ran the simulated one.
+   * A rejected assertion means this device isn't the one the server knows, so
+   * send the guest down the new-device path rather than dead-ending them.
    */
-  const verifyPasskey = useCallback(
-    async (assertion) => {
-      const credentialId = assertion?.credentialId ?? detection.credential?.credentialId
-      const { ok, credential } = authenticate(credentialId)
-
-      if (ok && assertion?.real) {
-        // A failed proof must stop here. Letting the error escape would land
-        // the screen in its "ceremony broke" branch, which falls back to the
-        // simulated check — exactly the wrong response to a bad signature.
-        let proof
-        try {
-          proof = await verifyAssertion(assertion, credential)
-        } catch (err) {
-          proof = { ok: false, reason: err?.message ?? 'unreadable public key' }
-        }
-        if (!proof.ok) {
-          showToast(`Passkey proof rejected — ${proof.reason}`)
-          return false
-        }
-      }
-
-      if (!ok) {
-        // Credential no longer trusted — fall back to the new-device path
-        // rather than dead-ending the guest.
-        showToast('Device no longer recognised — re-enrolling')
-        setDetection(detect(SESSION))
-        setStepIndex(0)
-        return false
-      }
-      return true
-    },
-    [detection.credential, showToast],
-  )
-
-  /** The ceremony needs a user handle before a credential exists, so the
-   *  identity is minted first. This and `createPasskey` below must resolve to
-   *  the same record — they do because `createIdentity` is idempotent per
-   *  booking ref, which is what binds the WebAuthn user handle to the identity
-   *  the credential ends up on. */
-  const ensureIdentity = useCallback(
-    () => detection.identity ?? createIdentity(SESSION),
-    [detection.identity],
-  )
-
-  /** First time / new device: mint the identity if needed, then store the passkey. */
-  const createPasskey = useCallback(
-    (passkey) => {
-      const identity = detection.identity ?? createIdentity(SESSION)
-      const credential = registerCredential(identity.id, passkey)
-      setDetection({ mode: activeMode, identity, credential })
-    },
-    [detection.identity, activeMode],
-  )
+  const fallBackToNewDevice = useCallback(() => {
+    setSession((s) => ({ ...s, journey: 'newDevice' }))
+    setStepIndex(0)
+  }, [])
 
   const screenProps = {
     next,
     showToast,
     onDone: reset,
-    activeMode,
-    credentialReal: detection.credential?.real ?? false,
-    verifyPasskey,
-    createPasskey,
-    ensureIdentity,
-    guestName: SESSION.guestName,
     onRescan: reset,
+    activeMode,
+    session,
+    checkin,
+    runIdentityCheck,
+    runEnrolment,
+    runAuthentication,
+    fallBackToNewDevice,
   }
 
-  // A two-tap flow doesn't need a progress bar — it only earns one when there
-  // is more than a single chrome-bearing step to track.
   const trackedSteps = currentFlowSteps.filter((s) => !s.bare && !s.final)
   const trackedIndex = trackedSteps.indexOf(step)
   const showChrome =
@@ -195,7 +185,6 @@ export default function App() {
       >
         <Toast toast={toast} />
 
-        {/* Header — Back / Help / Close on in-flow screens */}
         {phase === 'flow' && !step?.fullBleed && !step?.bare && (
           <header className="pt-safe z-20 flex shrink-0 items-center justify-between px-6 pb-2.5 sm:pt-6 bg-white">
             <IconButton icon={ChevronLeft} label="Back" onClick={back} />
@@ -208,29 +197,22 @@ export default function App() {
                 label="Help"
                 onClick={() => setHelpOpen(true)}
               />
-              <IconButton
-                icon={X}
-                label="Close"
-                onClick={() => setExitOpen(true)}
-              />
+              <IconButton icon={X} label="Close" onClick={() => setExitOpen(true)} />
             </div>
           </header>
         )}
 
-        {/* Screen Viewport */}
         <main className="no-scrollbar relative flex-1 overflow-y-auto bg-white">
           <AnimatePresence mode="wait" initial={false}>
             {phase === 'scan' ? (
               <ScanScreen
                 key="scan"
-                onScanned={handleScanned}
+                onToken={(token) =>
+                  begin(token).catch((err) => showToast(err.message))
+                }
                 onForgetDevice={() => {
                   forgetDevice()
-                  showToast('Device passkeys cleared')
-                }}
-                onResetAll={() => {
-                  resetAll()
-                  showToast('Identity and passkeys cleared')
+                  showToast('This device will be treated as new')
                 }}
               />
             ) : (
@@ -239,7 +221,6 @@ export default function App() {
           </AnimatePresence>
         </main>
 
-        {/* Bottom progress indicator + stepper */}
         {showChrome && (
           <footer className="pb-safe glass z-20 shrink-0 border-t border-slate-200/80 px-6 pt-3.5 sm:pb-5">
             <div className="mb-3 flex items-center justify-between">
@@ -261,8 +242,7 @@ export default function App() {
             {HELP[step?.key] ?? HELP.hotelWelcome}
           </p>
           <div className="mt-4 rounded-2xl bg-blue-50/50 px-4 py-3.5 text-[13px] text-slate-600 border border-blue-100/60">
-            Need desk support? Tap the bell at reception or call{' '}
-            <span className="font-bold text-slate-900">+91 22 4000 0000</span>.
+            Need help? Ask at the desk — they can check you in by hand.
           </div>
         </BottomSheet>
 
@@ -270,8 +250,8 @@ export default function App() {
           open={exitOpen}
           onClose={() => setExitOpen(false)}
           title="Leave check-in?"
-          body="Your current session progress will be reset."
-          confirmLabel="Exit Session"
+          body="You'll need to scan the code again to start over."
+          confirmLabel="Leave"
           onConfirm={reset}
         />
       </div>

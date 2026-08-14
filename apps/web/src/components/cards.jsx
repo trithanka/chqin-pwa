@@ -170,7 +170,7 @@ export function DocumentScanCard({ state }) {
 /* Success Card                                                        */
 /* ------------------------------------------------------------------ */
 
-export function SuccessCard({ children }) {
+export function SuccessCard({ children, venueName, roomNumber }) {
   return (
     <div className="flex flex-col items-center text-center my-auto">
       <motion.div
@@ -222,10 +222,10 @@ export function SuccessCard({ children }) {
       >
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.2),transparent_70%)]" />
         <p className="relative z-10 text-[11px] font-extrabold uppercase tracking-[0.18em] text-blue-200">
-          HOTEL AURORA
+          {(venueName ?? 'Checked in').toUpperCase()}
         </p>
         <p className="relative z-10 mt-1 text-[30px] font-black tracking-tight text-white">
-          ROOM 305
+          {roomNumber ? `ROOM ${roomNumber}` : 'YOU’RE IN'}
         </p>
       </motion.div>
 

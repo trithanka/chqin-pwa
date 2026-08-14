@@ -16,7 +16,7 @@ import { useCamera } from '../useCamera'
  * Where the camera is unavailable (no https, no permission) the screen falls
  * back to the stylized scan card so the flow still runs.
  */
-export default function IdentityVerificationScreen({ next, activeMode }) {
+export default function IdentityVerificationScreen({ next, activeMode, runIdentityCheck }) {
   const [stage, setStage] = useState('idle') // 'idle' | 'reading' | 'done'
   const [frame, setFrame] = useState(null)
   const { status, reason, videoRef, start, capture } = useCamera()
@@ -28,9 +28,11 @@ export default function IdentityVerificationScreen({ next, activeMode }) {
   // grab failed, fall back to the stylized card rather than a black rectangle.
   const showCamera = cameraLive || (status === 'stopped' && frame)
 
+  const [error, setError] = useState(null)
+
   const handleCapture = () => {
     // Freeze the frame and release the camera now — the still is what the
-    // guest looks at while the read is simulated.
+    // guest looks at while the check is recorded.
     setFrame(capture())
     setStage('reading')
   }
@@ -38,11 +40,29 @@ export default function IdentityVerificationScreen({ next, activeMode }) {
   // Fallback path: no camera, so the stylized card animates instead.
   const handleSimulatedScan = () => setStage('reading')
 
+  // Reading the document is still simulated; recording that the check
+  // happened is not — the server won't let a device enrol without it.
   useEffect(() => {
     if (stage !== 'reading') return
-    const t = setTimeout(() => setStage('done'), 1800)
-    return () => clearTimeout(t)
-  }, [stage])
+    let cancelled = false
+
+    const timer = setTimeout(async () => {
+      try {
+        await runIdentityCheck()
+        if (!cancelled) setStage('done')
+      } catch (err) {
+        if (!cancelled) {
+          setStage('idle')
+          setError(err.message ?? 'That check didn’t go through. Try again.')
+        }
+      }
+    }, 1600)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [stage, runIdentityCheck])
 
   const cardState = stage === 'done' ? 'done' : stage === 'reading' ? 'scanning' : 'idle'
 
@@ -73,12 +93,12 @@ export default function IdentityVerificationScreen({ next, activeMode }) {
       <div className="mt-6 h-6 text-center">
         <AnimatePresence mode="wait">
           <motion.p
-            key={`${stage}-${status}`}
+            key={`${stage}-${status}-${error ?? ''}`}
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             className={`text-[14px] font-bold tracking-tight ${
-              stage === 'done' ? 'text-emerald-600' : 'text-zinc-500'
+              stage === 'done' ? 'text-emerald-600' : error ? 'text-red-600' : 'text-zinc-500'
             }`}
           >
             {stage === 'done'
@@ -87,9 +107,11 @@ export default function IdentityVerificationScreen({ next, activeMode }) {
                 : '✓ Identity verified'
               : stage === 'reading'
                 ? 'Reading document…'
-                : cameraLive
-                  ? 'Fit your ID inside the frame'
-                  : (reason ?? 'Position your ID inside the frame')}
+                : error
+                  ? error
+                  : cameraLive
+                    ? 'Fit your ID inside the frame'
+                    : (reason ?? 'Position your ID inside the frame')}
           </motion.p>
         </AnimatePresence>
       </div>
