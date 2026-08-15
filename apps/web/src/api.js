@@ -37,6 +37,7 @@ async function request(path, body) {
 
 export const api = {
   resolveSession: (token) => request('/sessions/resolve', { token }),
+  attachBooking: (sessionId, lookup) => request('/sessions/booking', { sessionId, lookup }),
   detect: (sessionId, knownCredentialIds) => request('/detect', { sessionId, knownCredentialIds }),
   verifyIdentity: (sessionId) => request('/identity/verifications', { sessionId }),
   registrationOptions: (sessionId, verificationId) =>

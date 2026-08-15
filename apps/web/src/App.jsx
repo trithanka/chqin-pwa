@@ -17,6 +17,7 @@ import SecureDeviceScreen from './screens/SecureDeviceScreen'
 import SuccessScreen from './screens/SuccessScreen'
 import { forgetDevice } from './device'
 import {
+  attachBooking,
   authenticate,
   clearTokenFromLocation,
   completeCheckin,
@@ -53,6 +54,7 @@ const FLOWS = {
 const HELP = {
   hotelWelcome: 'Confirm the details match your booking. ChqIn works out the rest from your device.',
   deviceVerify: 'Whatever unlocks your phone releases the passkey stored on it. ChqIn only ever sees the signed proof.',
+  findBooking: 'The code on the desk knows the hotel but not you. Your last name is usually enough — only today\'s arrivals are searched.',
   identity: 'Lay your government ID flat in good light inside the frame. This is a one-time step.',
   secureDevice: 'Creates a passkey for this device, protected by your phone’s own unlock. The private key never leaves your phone.',
   done: 'Check-in is complete. Enjoy your stay.',
@@ -78,7 +80,16 @@ export default function App() {
   }, [])
 
   const activeMode = session?.journey ?? 'firstTime'
+
+  // A check-in doesn't need a reservation: it records that this person arrived
+  // here. When the QR already carries a booking the room shows up anyway; when
+  // it doesn't, nobody is asked to go and find one.
+  //
+  // screens/FindBookingScreen.jsx is still in the tree — importing it and
+  // splicing it in after the welcome step is the one change needed if matching
+  // a reservation becomes required again.
   const currentFlowSteps = FLOWS[activeMode]
+
   const step = currentFlowSteps[stepIndex]
 
   /* -------------------------------------------------------------- */
@@ -89,7 +100,7 @@ export default function App() {
     async (token) => {
       const started = await start(token)
       clearTokenFromLocation()
-      setSession(started)
+      setSession({ ...started, needsBooking: !started.booking })
       setStepIndex(0)
       setPhase('flow')
       return started
@@ -157,8 +168,19 @@ export default function App() {
     setStepIndex(0)
   }, [])
 
+  /** Names the reservation, which also gives the passkey a name to show. */
+  const linkBooking = useCallback(
+    async (lookup) => {
+      const { booking } = await attachBooking(session.sessionId, lookup)
+      setSession((s) => ({ ...s, booking }))
+      return booking
+    },
+    [session],
+  )
+
   const screenProps = {
     next,
+    attachBooking: linkBooking,
     showToast,
     onDone: reset,
     onRescan: reset,

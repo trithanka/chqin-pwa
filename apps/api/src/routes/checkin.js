@@ -18,7 +18,7 @@ checkin.post('/', body(checkinRequest), async (c) => {
   // A retry after a dropped response must not 404 on the session its own first
   // attempt consumed — the idempotency key is the whole point.
   if (!open) {
-    const existing = await findByIdempotencyKey(session.bookingId, idempotencyKey)
+    const existing = await findByIdempotencyKey(idempotencyKey)
     if (!existing) throw conflict('session_used', 'This check-in session is closed.')
 
     return c.json({

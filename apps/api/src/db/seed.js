@@ -1,6 +1,25 @@
 import { bookings, checkinSessions, venues, rooms } from './schema/index.js'
 import { db, pool } from './client.js'
 import { newSessionToken, tokenHash } from '../lib/crypto.js'
+import { config, isRemote } from '../config.js'
+
+/**
+ * Refuse a database that isn't on this machine unless told explicitly.
+ *
+ * These scripts destroy data, and which database they hit depends on whichever
+ * URL happens to be uncommented in .env — a state that changes for unrelated
+ * reasons, like running a migration. Requiring the flag means a production
+ * wipe is always a decision, never a leftover.
+ */
+if (isRemote()) {
+  if (process.env.CHQIN_ALLOW_REMOTE !== 'yes') {
+    console.error(`Refusing: DATABASE_URL points at ${new URL(config.DATABASE_URL).host}.`)
+    console.error('If you mean it, re-run with CHQIN_ALLOW_REMOTE=yes.')
+    process.exit(1)
+  }
+  console.warn(`⚠︎ operating on REMOTE database ${new URL(config.DATABASE_URL).host}`)
+}
+
 
 /**
  * Enough data to exercise the flow: one hotel, three reservations arriving

@@ -108,6 +108,64 @@ export async function resolveToken(token) {
   return loadAny(child.id)
 }
 
+/**
+ * Attach a reservation to a session that arrived without one.
+ *
+ * A desk QR identifies the venue, not the guest — so somebody scanning the
+ * card has to say which booking is theirs before anything else can happen.
+ * Without this the flow enrols a passkey for "Guest" and then can't check
+ * anyone in, which is exactly as useless as it sounds.
+ *
+ * Matching is deliberately narrow: today's confirmed arrivals at this venue
+ * only. A booking reference matches exactly; a surname matches the end of the
+ * booked name, and an ambiguous surname asks for the reference rather than
+ * guessing between two guests.
+ */
+export async function attachBookingByLookup(session, lookup) {
+  const term = lookup.trim()
+  if (term.length < 2) throw notFound('Enter your booking reference or last name.')
+
+  const candidates = await db
+    .select({
+      id: bookings.id,
+      reference: bookings.bookingRef,
+      guestName: bookings.guestName,
+      roomNumber: rooms.number,
+      arrivalDate: bookings.arrivalDate,
+      departureDate: bookings.departureDate,
+    })
+    .from(bookings)
+    .leftJoin(rooms, eq(rooms.id, bookings.roomId))
+    .where(
+      and(
+        eq(bookings.venueId, session.venueId),
+        eq(bookings.status, 'confirmed'),
+        sql`${bookings.arrivalDate} = CURRENT_DATE`,
+        sql`(lower(${bookings.bookingRef}) = lower(${term})
+             OR lower(${bookings.guestName}) LIKE lower(${'%' + term}))`,
+      ),
+    )
+    .limit(5)
+
+  if (!candidates.length) {
+    throw notFound("We couldn't find that booking for today. Check with the desk.")
+  }
+  if (candidates.length > 1) {
+    throw conflict(
+      'ambiguous_booking',
+      'More than one booking matches that name. Enter your booking reference instead.',
+    )
+  }
+
+  const booking = candidates[0]
+  await db
+    .update(checkinSessions)
+    .set({ bookingId: booking.id })
+    .where(eq(checkinSessions.id, session.id))
+
+  return booking
+}
+
 /** Records who the session belongs to. Only a verified ceremony may call this. */
 export const bindGuest = (tx, sessionId, guestId) =>
   tx.update(checkinSessions).set({ guestId }).where(eq(checkinSessions.id, sessionId))

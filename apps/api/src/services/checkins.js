@@ -1,7 +1,7 @@
 import { and, desc, eq, isNull, sql } from 'drizzle-orm'
 import { db, transaction } from '../db/client.js'
 import { bookings, checkinSessions, checkins, credentials, rooms } from '../db/schema/index.js'
-import { conflict, unauthorized } from '../lib/errors.js'
+import { unauthorized } from '../lib/errors.js'
 
 /**
  * The check-in itself. Everything before this exists to establish who the
@@ -10,8 +10,8 @@ import { conflict, unauthorized } from '../lib/errors.js'
  */
 
 /** The original result of a completed check-in, for a retry to receive. */
-export async function findByIdempotencyKey(bookingId, key) {
-  if (!bookingId || !key) return null
+export async function findByIdempotencyKey(key) {
+  if (!key) return null
   const [row] = await db
     .select({
       id: checkins.id,
@@ -21,7 +21,7 @@ export async function findByIdempotencyKey(bookingId, key) {
     })
     .from(checkins)
     .leftJoin(rooms, eq(rooms.id, checkins.roomId))
-    .where(and(eq(checkins.bookingId, bookingId), eq(checkins.idempotencyKey, key)))
+    .where(eq(checkins.idempotencyKey, key))
     .limit(1)
 
   return row ?? null
@@ -31,10 +31,6 @@ export async function checkIn(session, idempotencyKey) {
   if (!session.guestId) {
     throw unauthorized('not_authenticated', 'Verify with your passkey first.')
   }
-  if (!session.bookingId) {
-    throw conflict('no_booking', 'No reservation is attached to this session.')
-  }
-
   // What the server decided at detection, not what the rows look like now:
   // enrolment sets bookings.guestId, so a first-time guest would otherwise
   // finish as 'returning'.
@@ -61,16 +57,19 @@ export async function checkIn(session, idempotencyKey) {
         idempotencyKey,
       })
       .onConflictDoUpdate({
-        target: [checkins.bookingId, checkins.idempotencyKey],
+        target: checkins.idempotencyKey,
         targetWhere: sql`idempotency_key IS NOT NULL`,
         set: { journey: sql`${checkins.journey}` },
       })
       .returning({ id: checkins.id, checkedInAt: checkins.checkedInAt })
 
-    await tx
-      .update(bookings)
-      .set({ status: 'checked_in', guestId: sql`COALESCE(${bookings.guestId}, ${session.guestId})` })
-      .where(eq(bookings.id, session.bookingId))
+    // Only when there is one — a walk-in has no reservation to move on.
+    if (session.bookingId) {
+      await tx
+        .update(bookings)
+        .set({ status: 'checked_in', guestId: sql`COALESCE(${bookings.guestId}, ${session.guestId})` })
+        .where(eq(bookings.id, session.bookingId))
+    }
 
     await tx
       .update(checkinSessions)

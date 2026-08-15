@@ -43,6 +43,13 @@
       "when": 1786730181068,
       "tag": "0005_desk_token",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786808667306,
+      "tag": "0006_optional_booking",
+      "breakpoints": true
     }
   ]
 }

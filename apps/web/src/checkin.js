@@ -27,6 +27,9 @@ export async function start(token) {
   }
 }
 
+/** Desk QRs arrive without a reservation; this is the guest naming theirs. */
+export const attachBooking = (sessionId, lookup) => api.attachBooking(sessionId, lookup)
+
 /** The one-time identity check. Its id is what permits enrolment. */
 export const verifyIdentity = (sessionId) => api.verifyIdentity(sessionId)
 

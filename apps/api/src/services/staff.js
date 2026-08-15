@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
 import { db, transaction } from '../db/client.js'
 import {
   bookings,
@@ -206,18 +206,52 @@ export async function checkinCode(venueId) {
   return { token }
 }
 
-/** Today's arrivals plus the counts a desk actually watches. */
+/**
+ * Today's arrivals plus the counts a desk actually watches.
+ *
+ * Two kinds of row: reservations expected today, and people who simply turned
+ * up and checked in. A list built only from bookings would show nothing at a
+ * venue that doesn't take them.
+ */
 export async function overview(venueId) {
   const today = new Date().toISOString().slice(0, 10)
 
-  const arrivals = await bookingsQuery(venueId).where(
+  const expected = await bookingsQuery(venueId).where(
     and(eq(bookings.venueId, venueId), eq(bookings.arrivalDate, today)),
   )
 
+  const walkIns = await db
+    .select({
+      id: checkins.id,
+      reference: sql`null`,
+      guestId: checkins.guestId,
+      guestName: guests.displayName,
+      room: rooms.number,
+      roomType: sql`null`,
+      arrival: sql`${today}`,
+      departure: sql`null`,
+      status: sql`'checked_in'`,
+      source: sql`null`,
+      checkedInAt: checkins.checkedInAt,
+      journey: checkins.journey,
+    })
+    .from(checkins)
+    .leftJoin(guests, eq(guests.id, checkins.guestId))
+    .leftJoin(rooms, eq(rooms.id, checkins.roomId))
+    .where(
+      and(
+        eq(checkins.venueId, venueId),
+        isNull(checkins.bookingId),
+        sql`${checkins.checkedInAt}::date = CURRENT_DATE`,
+      ),
+    )
+
+  const arrivals = [...expected, ...walkIns]
+
   const [inHouse] = await db
     .select({ value: count() })
-    .from(bookings)
-    .where(and(eq(bookings.venueId, venueId), eq(bookings.status, 'checked_in')))
+    .from(checkins)
+    .where(and(eq(checkins.venueId, venueId), sql`${checkins.checkedInAt}::date >= CURRENT_DATE - 1`))
 
   const [roomCount] = await db
     .select({ value: count() })
