@@ -91,8 +91,17 @@
   }
 }
 
+/**
+ * Clears the notch when there is one, and nothing more.
+ *
+ * The floor used to be 3rem, sized for a home-screen launch where the status
+ * bar sits over the app. In a browser tab the inset is 0 and the URL bar
+ * already separates things, so that floor became 48px of dead space under the
+ * address bar. Now the inset does the work and the floor is just breathing
+ * room.
+ */
 @utility pt-safe {
-  padding-top: max(var(--pt-safe-min, 3rem), calc(env(safe-area-inset-top) + 0.75rem));
+  padding-top: max(var(--pt-safe-min, 1rem), calc(env(safe-area-inset-top) + 0.75rem));
 }
 
 @utility pb-safe {
