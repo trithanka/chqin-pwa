@@ -15,6 +15,7 @@ import DeviceVerificationScreen from './screens/DeviceVerificationScreen'
 import IdentityVerificationScreen from './screens/IdentityVerificationScreen'
 import SecureDeviceScreen from './screens/SecureDeviceScreen'
 import SuccessScreen from './screens/SuccessScreen'
+import OpeningScreen from './screens/OpeningScreen'
 import { forgetDevice } from './device'
 import {
   attachBooking,
@@ -61,8 +62,15 @@ const HELP = {
 }
 
 export default function App() {
-  // 'scan' → waiting for a QR. 'flow' → a live session with the server.
-  const [phase, setPhase] = useState('scan')
+  /**
+   * 'scan' → waiting for a QR · 'opening' → resolving one · 'flow' → a session.
+   *
+   * The starting phase is decided synchronously from the URL, not after the
+   * first render: a guest arriving on /c/<token> has already scanned, and a
+   * flash of the scanner (camera and all) before the welcome screen is both
+   * confusing and slow.
+   */
+  const [phase, setPhase] = useState(() => (tokenFromLocation() ? 'opening' : 'scan'))
   const [session, setSession] = useState(null)
   const [checkin, setCheckin] = useState(null)
   const [stepIndex, setStepIndex] = useState(0)
@@ -114,7 +122,9 @@ export default function App() {
     const token = tokenFromLocation()
     if (!token) return
     begin(token).catch((err) => {
+      // The code was bad or expired — fall back to the scanner and say why.
       clearTokenFromLocation()
+      setPhase('scan')
       showToast(err.message)
     })
   }, [begin, showToast])
@@ -226,7 +236,9 @@ export default function App() {
 
         <main className="no-scrollbar relative flex-1 overflow-y-auto bg-white">
           <AnimatePresence mode="wait" initial={false}>
-            {phase === 'scan' ? (
+            {phase === 'opening' ? (
+              <OpeningScreen key="opening" />
+            ) : phase === 'scan' ? (
               <ScanScreen
                 key="scan"
                 onToken={(token) =>
