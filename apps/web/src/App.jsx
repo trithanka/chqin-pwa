@@ -24,9 +24,11 @@ import {
   clearTokenFromLocation,
   completeCheckin,
   enrolDevice,
+  recordDocument,
+  requestAadhaarOtp,
   start,
   tokenFromLocation,
-  verifyIdentity,
+  verifyAadhaarOtp,
 } from './checkin'
 
 /* ------------------------------------------------------------------ */
@@ -156,12 +158,26 @@ export default function App() {
   /* The steps, each one a call to the server                        */
   /* -------------------------------------------------------------- */
 
-  /** Records the one-time check and returns the id enrolment needs. */
-  const runIdentityCheck = useCallback(async () => {
-    const { verificationId } = await verifyIdentity(session.sessionId)
-    setSession((s) => ({ ...s, verificationId }))
-    return verificationId
-  }, [session])
+  /** Aadhaar: ask for the code. */
+  const requestOtp = useCallback(
+    (aadhaar) => requestAadhaarOtp(session.sessionId, aadhaar),
+    [session],
+  )
+
+  /**
+   * Aadhaar: check the code. The verification id it returns is what permits
+   * this device to enrol a passkey, so it's kept on the session.
+   */
+  const verifyOtp = useCallback(
+    async (requestId, otp, consent) => {
+      const result = await verifyAadhaarOtp(session.sessionId, requestId, otp, consent)
+      setSession((s) => ({ ...s, verificationId: result.verificationId, subject: result.subject }))
+      return result
+    },
+    [session],
+  )
+
+  const recordCapture = useCallback(() => recordDocument(session.sessionId), [session])
 
   /** Enrol this device, then finish. First-time and new-device end here. */
   const runEnrolment = useCallback(async () => {
@@ -205,7 +221,9 @@ export default function App() {
     activeMode,
     session,
     checkin,
-    runIdentityCheck,
+    requestOtp,
+    verifyOtp,
+    recordCapture,
     runEnrolment,
     runAuthentication,
     fallBackToNewDevice,

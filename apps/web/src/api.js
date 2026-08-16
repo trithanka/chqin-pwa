@@ -40,6 +40,9 @@ export const api = {
   attachBooking: (sessionId, lookup) => request('/sessions/booking', { sessionId, lookup }),
   detect: (sessionId, knownCredentialIds) => request('/detect', { sessionId, knownCredentialIds }),
   verifyIdentity: (sessionId) => request('/identity/verifications', { sessionId }),
+  requestAadhaarOtp: (sessionId, aadhaar) => request('/identity/aadhaar/otp', { sessionId, aadhaar }),
+  verifyAadhaarOtp: (payload) => request('/identity/aadhaar/verify', payload),
+  recordDocument: (sessionId) => request('/identity/document', { sessionId }),
   registrationOptions: (sessionId, verificationId) =>
     request('/webauthn/registration/options', { sessionId, verificationId }),
   registrationVerify: (payload) => request('/webauthn/registration/verify', payload),

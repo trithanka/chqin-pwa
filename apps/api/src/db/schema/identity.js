@@ -5,6 +5,7 @@ import {
   check,
   customType,
   date,
+  jsonb,
   index,
   integer,
   pgTable,
@@ -103,12 +104,21 @@ export const identityVerifications = pgTable(
     guestId: uuid('guest_id').references(() => guests.id, { onDelete: 'cascade' }),
     // Unconstrained on purpose: the record outlives the session it happened in.
     sessionId: uuid('session_id'),
-    method: text('method').notNull(), // document | manual_desk | simulated
+    method: text('method').notNull(),
     provider: text('provider'),
     providerRef: text('provider_ref'),
     documentType: text('document_type'),
+    // The identifier itself is never stored: a keyed hash recognises a repeat
+    // guest, and the last four digits are all anyone needs to see.
     documentHmac: bytea('document_hmac'),
     documentLast4: text('document_last4'),
+    // What the check returned about the holder.
+    subjectName: text('subject_name'),
+    subjectDob: date('subject_dob'),
+    subjectGender: text('subject_gender'),
+    // Agreeing to an identity check is something you must be able to prove
+    // happened: which text, and when.
+    consent: jsonb('consent'),
     artifactUri: text('artifact_uri'),
     result: text('result').notNull(), // passed | failed | manual_review
     verifiedAt: timestamp('verified_at', { withTimezone: true }),
@@ -117,7 +127,10 @@ export const identityVerifications = pgTable(
   },
   (table) => [
     index('identity_verifications_guest').on(table.guestId, table.createdAt),
-    check('identity_verifications_method', sql`${table.method} IN ('document','manual_desk','simulated')`),
+    check(
+      'identity_verifications_method',
+      sql`${table.method} IN ('document','manual_desk','simulated','aadhaar_otp')`,
+    ),
     check('identity_verifications_result', sql`${table.result} IN ('passed','failed','manual_review')`),
   ],
 )

@@ -30,8 +30,17 @@ export async function start(token) {
 /** Desk QRs arrive without a reservation; this is the guest naming theirs. */
 export const attachBooking = (sessionId, lookup) => api.attachBooking(sessionId, lookup)
 
-/** The one-time identity check. Its id is what permits enrolment. */
-export const verifyIdentity = (sessionId) => api.verifyIdentity(sessionId)
+/**
+ * Aadhaar, in two calls: a code to the registered mobile, then the code plus
+ * the guest's consent, which returns the details the desk is allowed to see.
+ */
+export const requestAadhaarOtp = (sessionId, aadhaar) => api.requestAadhaarOtp(sessionId, aadhaar)
+
+export const verifyAadhaarOtp = (sessionId, requestId, otp, consent) =>
+  api.verifyAadhaarOtp({ sessionId, requestId, otp, consent })
+
+/** The camera path records that a card was shown, for the desk to review. */
+export const recordDocument = (sessionId) => api.recordDocument(sessionId)
 
 /**
  * Enrol this device. The credential ID is remembered locally afterwards —

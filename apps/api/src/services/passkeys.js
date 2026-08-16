@@ -19,6 +19,7 @@ import { lookupHash } from '../lib/crypto.js'
 import { uuidv7 } from '../lib/ids.js'
 import { ApiError, forbidden, unauthorized } from '../lib/errors.js'
 import { attachBooking, bindGuest } from './sessions.js'
+import { verifiedSubject } from './identity.js'
 
 /**
  * The relying party. Challenges are issued and verified here — the client
@@ -68,7 +69,14 @@ async function resolveUserHandle(tx, session) {
       .limit(1)
     if (guest) return { guestId: guest.id, handle: guest.id, name: guest.displayName }
   }
-  return { guestId: null, handle: uuidv7(), name: session.bookingGuestName ?? 'Guest' }
+  // What the OS shows in the guest's passkey list, so it has to be the best
+  // name available: verified first, then the booking, then nothing useful.
+  const subject = await verifiedSubject(session.id)
+  return {
+    guestId: null,
+    handle: uuidv7(),
+    name: subject?.name ?? session.bookingGuestName ?? 'Guest',
+  }
 }
 
 export async function startRegistration(session) {
@@ -129,11 +137,17 @@ export async function startRegistration(session) {
 async function materialiseGuest(tx, challenge, session) {
   if (challenge.guestId) return challenge.guestId
 
+  // Prefer what the identity check returned: a verified name beats the name on
+  // a reservation, and both beat "Guest".
+  const subject = await verifiedSubject(session.id)
+
   const [guest] = await tx
     .insert(guests)
     .values({
       id: challenge.pendingUserHandle,
-      displayName: challenge.pendingDisplayName ?? 'Guest',
+      displayName: subject?.name ?? challenge.pendingDisplayName ?? 'Guest',
+      dateOfBirth: subject?.dateOfBirth ?? null,
+      gender: subject?.gender ?? null,
       emailHmac: lookupHash(null),
     })
     .returning({ id: guests.id })

@@ -25,7 +25,8 @@
     "db:reset": "npm run db:reset --workspace @chqin/api",
     "db:clear": "npm run db:clear --workspace @chqin/api",
     "db:reseed": "npm run db:reseed --workspace @chqin/api",
-    "dev:stop": "lsof -ti:5173,5174,8787 -sTCP:LISTEN | xargs -r kill || true"
+    "dev:stop": "kill -9 $(lsof -t -i:5173 -i:5174 -i:8787) 2>/dev/null || true",
+    "dev:clean": "npm run dev:stop && npm run dev:all"
   },
   "devDependencies": {
     "concurrently": "^10.0.4",
