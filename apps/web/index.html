@@ -4,9 +4,11 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="apple-touch-icon" href="/icon-180.png" />
+    <!-- viewport-fit=cover puts the app under the notch and home indicator,
+         which the pt-safe / pb-safe utilities then pad back out. -->
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover, user-scalable=no"
     />
 
     <!-- Added to the home screen, this launches standalone — no URL bar.

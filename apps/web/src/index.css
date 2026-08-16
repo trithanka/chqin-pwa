@@ -47,11 +47,17 @@
 @layer base {
   html {
     -webkit-tap-highlight-color: transparent;
+    /* No rubber-banding at the ends of a scroll, and no pull-to-refresh
+       mid-check-in — both are browser gestures that break the illusion. */
     overscroll-behavior: none;
+    height: 100%;
   }
 
   body {
     margin: 0;
+    /* Fills the area behind the safe insets so the status bar never shows a
+       different colour from the screen it sits above. */
+    min-height: 100%;
     background: #cbd5e1;
     font-family: var(--font-sans);
     color: #0f172a;
@@ -61,8 +67,23 @@
     user-select: none;
   }
 
-  input {
+  input,
+  textarea {
     user-select: text;
+    /* 16px or larger, or iOS zooms the page when the field takes focus. */
+    font-size: max(16px, 1em);
+  }
+
+  /* A long press on an app doesn't offer to save the image. */
+  img,
+  svg {
+    -webkit-touch-callout: none;
+    pointer-events: none;
+  }
+
+  button,
+  a {
+    touch-action: manipulation;
   }
 
   button {

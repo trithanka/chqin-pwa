@@ -14,7 +14,7 @@ import { PrimaryButton, Screen, ScreenTitle } from '../components/ui'
  * booking there is nothing to check into, and enrolling first would leave a
  * credential belonging to "Guest" on the phone of someone who never got in.
  */
-export default function FindBookingScreen({ next, session, attachBooking }) {
+export default function FindBookingScreen({ next, session, attachBooking, direction }) {
   const [value, setValue] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
@@ -36,7 +36,7 @@ export default function FindBookingScreen({ next, session, attachBooking }) {
   }
 
   return (
-    <Screen className="justify-between pt-7 pb-8 px-7">
+    <Screen direction={direction} className="justify-between pt-7 pb-8 px-7">
       <div>
         <ScreenTitle
           title="Find your booking"

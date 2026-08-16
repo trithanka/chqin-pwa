@@ -14,6 +14,7 @@ export default function DeviceVerificationScreen({
   next,
   runAuthentication,
   fallBackToNewDevice,
+  direction,
 }) {
   const [mode, setMode] = useState(null)
   const [state, setState] = useState('idle') // 'idle' | 'verifying' | 'verified'
@@ -59,7 +60,7 @@ export default function DeviceVerificationScreen({
   const blocked = mode === 'simulated'
 
   return (
-    <Screen className="justify-between pt-7 pb-8 px-7">
+    <Screen direction={direction} className="justify-between pt-7 pb-8 px-7">
       <div>
         <ScreenTitle
           title="Verify it's you"

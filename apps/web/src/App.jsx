@@ -17,6 +17,7 @@ import SecureDeviceScreen from './screens/SecureDeviceScreen'
 import SuccessScreen from './screens/SuccessScreen'
 import OpeningScreen from './screens/OpeningScreen'
 import { forgetDevice } from './device'
+import { DARK_SCREEN, LIGHT_SCREEN, setStatusBar } from './lib/statusBar'
 import {
   attachBooking,
   authenticate,
@@ -78,6 +79,8 @@ export default function App() {
   const [exitOpen, setExitOpen] = useState(false)
   const [toast, setToast] = useState(null)
   const toastTimer = useRef(null)
+  // +1 going forward, -1 going back: screens slide the way you're travelling.
+  const [direction, setDirection] = useState(1)
 
   useEffect(() => () => clearTimeout(toastTimer.current), [])
 
@@ -130,6 +133,7 @@ export default function App() {
   }, [begin, showToast])
 
   const reset = useCallback(() => {
+    setDirection(-1)
     setPhase('scan')
     setSession(null)
     setCheckin(null)
@@ -137,9 +141,13 @@ export default function App() {
     setExitOpen(false)
   }, [])
 
-  const next = useCallback(() => setStepIndex((i) => i + 1), [])
+  const next = useCallback(() => {
+    setDirection(1)
+    setStepIndex((i) => i + 1)
+  }, [])
 
   const back = () => {
+    setDirection(-1)
     if (stepIndex <= 0) reset()
     else setStepIndex((i) => i - 1)
   }
@@ -203,6 +211,11 @@ export default function App() {
     fallBackToNewDevice,
   }
 
+  useEffect(() => {
+    const dark = phase === 'scan' || phase === 'opening'
+    setStatusBar(dark ? DARK_SCREEN : LIGHT_SCREEN)
+  }, [phase])
+
   const trackedSteps = currentFlowSteps.filter((s) => !s.bare && !s.final)
   const trackedIndex = trackedSteps.indexOf(step)
   const showChrome =
@@ -250,7 +263,11 @@ export default function App() {
                 }}
               />
             ) : (
-              <step.Screen key={`${activeMode}-${step.key}`} {...screenProps} />
+              <step.Screen
+                key={`${activeMode}-${step.key}`}
+                direction={direction}
+                {...screenProps}
+              />
             )}
           </AnimatePresence>
         </main>

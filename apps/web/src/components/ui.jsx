@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Check, LoaderCircle, ShieldCheck, X } from 'lucide-react'
+import { tapped } from '../lib/haptics'
 
 /**
  * Overlays portal into the phone shell so they cover the header too, no
@@ -40,7 +41,10 @@ export function PrimaryButton({
       type="button"
       whileTap={disabled || loading ? undefined : tap}
       transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-      onClick={onClick}
+      onClick={(e) => {
+        tapped()
+        onClick?.(e)
+      }}
       disabled={disabled || loading}
       className={`relative overflow-hidden flex h-14 w-full items-center justify-center gap-2.5 rounded-[20px] text-[15.5px] font-bold tracking-[-0.01em] transition-all duration-200 disabled:opacity-45 ${tones[tone]}`}
     >
@@ -165,13 +169,19 @@ export function Skeleton({ className = '' }) {
   return <div className={`skeleton rounded-xl ${className}`} />
 }
 
-export function Screen({ children, className = '' }) {
+/**
+ * Screens push and pop like a native stack: forward slides in from the right,
+ * back slides in from the left. Direction is what makes a flow feel like a
+ * place you're moving through rather than a page that keeps replacing itself —
+ * and it tells you, without words, that Back undoes something.
+ */
+export function Screen({ children, className = '', direction = 1 }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -14 }}
-      transition={{ duration: 0.28, ease: [0.25, 1, 0.5, 1] }}
+      initial={{ opacity: 0, x: 28 * direction }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -28 * direction }}
+      transition={{ type: 'spring', stiffness: 420, damping: 38, mass: 0.7 }}
       className={`flex min-h-full flex-col px-6 pb-6 ${className}`}
     >
       {children}

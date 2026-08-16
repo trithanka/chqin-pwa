@@ -16,7 +16,7 @@ import { useCamera } from '../useCamera'
  * Where the camera is unavailable (no https, no permission) the screen falls
  * back to the stylized scan card so the flow still runs.
  */
-export default function IdentityVerificationScreen({ next, activeMode, runIdentityCheck }) {
+export default function IdentityVerificationScreen({ next, activeMode, runIdentityCheck, direction }) {
   const [stage, setStage] = useState('idle') // 'idle' | 'reading' | 'done'
   const [frame, setFrame] = useState(null)
   const { status, reason, videoRef, start, capture } = useCamera()
@@ -67,7 +67,7 @@ export default function IdentityVerificationScreen({ next, activeMode, runIdenti
   const cardState = stage === 'done' ? 'done' : stage === 'reading' ? 'scanning' : 'idle'
 
   return (
-    <Screen>
+    <Screen direction={direction}>
       <ScreenTitle
         title={recovering ? 'Confirm it’s you' : 'Verify your identity'}
         subtitle={

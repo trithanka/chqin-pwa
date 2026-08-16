@@ -11,7 +11,7 @@ import { isCancellation, passkeyMode, unsupportedReason } from '../passkey'
  * and the server verifies it — so reaching the next screen means a check-in
  * actually exists, not that an animation finished.
  */
-export default function SecureDeviceScreen({ next, activeMode, runEnrolment }) {
+export default function SecureDeviceScreen({ next, activeMode, runEnrolment, direction }) {
   const [mode, setMode] = useState(null) // null while probing
   const [state, setState] = useState('idle') // 'idle' | 'working' | 'done'
   const [note, setNote] = useState(null)
@@ -51,7 +51,7 @@ export default function SecureDeviceScreen({ next, activeMode, runEnrolment }) {
   const blocked = mode === 'simulated'
 
   return (
-    <Screen className="justify-between pt-7 pb-8 px-7">
+    <Screen direction={direction} className="justify-between pt-7 pb-8 px-7">
       <div>
         <ScreenTitle
           title={activeMode === 'newDevice' ? 'Set up this device' : 'Secure your device'}
