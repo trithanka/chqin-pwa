@@ -53,6 +53,23 @@ const schema = z.object({
 
   CHALLENGE_TTL_MS: z.coerce.number().default(120_000),
   SESSION_TTL_MS: z.coerce.number().default(300_000),
+
+  /**
+   * Sandbox (sandbox.co.in) — the KUA behind the Aadhaar OKYC check.
+   *
+   * Absent, identity verification falls back to a simulation, which is why the
+   * guard at the bottom of this file refuses to start production without them:
+   * a missing env var must not quietly turn invented demographics into a
+   * `passed` verification.
+   *
+   * Live keys only work against the production host; test keys only against
+   * test-api. A mismatched pair fails at /authenticate, looking like a bad key.
+   */
+  SANDBOX_API_KEY: z.string().optional(),
+  SANDBOX_API_SECRET: z.string().optional(),
+  SANDBOX_BASE_URL: z.string().default('https://api.sandbox.co.in'),
+  // Sent to UIDAI and shown in Sandbox's transaction log; keep it truthful.
+  SANDBOX_KYC_REASON: z.string().default('Hotel guest check-in identity verification'),
 })
 
 /**
@@ -97,5 +114,13 @@ export const sslFor = (url) =>
 
 if (config.HASH_PEPPER.startsWith('dev-only') && process.env.NODE_ENV === 'production') {
   console.error('HASH_PEPPER is still the development default. Refusing to start.')
+  process.exit(1)
+}
+
+if (
+  process.env.NODE_ENV === 'production' &&
+  !(config.SANDBOX_API_KEY && config.SANDBOX_API_SECRET)
+) {
+  console.error('SANDBOX_API_KEY/SANDBOX_API_SECRET are missing, so identity checks would be simulated. Refusing to start.')
   process.exit(1)
 }

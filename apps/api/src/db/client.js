@@ -15,9 +15,30 @@ export const pool = new pg.Pool({
   // rather than making anything faster.
   max: isRemote() ? Math.min(config.PG_POOL_MAX, 5) : config.PG_POOL_MAX,
   ssl: sslFor(config.DATABASE_URL),
-  idleTimeoutMillis: 30_000,
+  /**
+   * Discard idle connections before the network does.
+   *
+   * A NAT on the path — a phone hotspot, a hotel's own router — drops idle TCP
+   * flows in well under a minute, and neither end is told. The socket looks fine
+   * from here, so the pool hands it to the next query and that query dies with
+   * "Connection terminated unexpectedly" inside a connect timeout, usually the
+   * first request after a quiet spell. Retiring remote connections sooner than
+   * any such device would means we close them rather than discover them dead.
+   */
+  idleTimeoutMillis: isRemote() ? 10_000 : 30_000,
+  // Keepalives on the ones still in use, for the same reason.
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 5_000,
   connectionTimeoutMillis: 10_000,
 })
+
+/**
+ * A pool with no error listener crashes the process when an *idle* client
+ * errors, which is exactly what the dropped flow above looks like. The pool
+ * discards the client either way; the request that finds it is where the failure
+ * belongs, not the whole API.
+ */
+pool.on('error', (err) => console.error('pg pool: idle client error —', err.message))
 
 export const db = drizzle(pool, { schema })
 

@@ -32,3 +32,6 @@ dev-dist
 # only the example is tracked
 .env.*
 !.env.example
+
+# API credentials exported from provider consoles
+sbox_live_key.csv

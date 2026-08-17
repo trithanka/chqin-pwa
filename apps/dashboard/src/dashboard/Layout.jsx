@@ -18,7 +18,7 @@ export default function Layout() {
     <div className="flex min-h-dvh flex-col lg:flex-row">
       <aside className="flex shrink-0 flex-col bg-rail px-4 py-5 lg:w-[248px] lg:px-4 lg:py-6">
         <div className="mb-6 flex items-center gap-2.5 px-2 text-white">
-          <Logo wordmark={false} className="size-7 shrink-0 text-white" />
+          <Logo className="h-6.5 w-auto shrink-0 text-white" />
           <div className="min-w-0 leading-tight">
             <p className="truncate text-[14px] font-bold tracking-[-0.02em]">
               {user?.venue?.name ?? 'Your property'}

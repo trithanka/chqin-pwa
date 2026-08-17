@@ -350,6 +350,7 @@ the guest is.
 | --- | --- |
 | `POST /sessions/resolve` | QR token → session. A `desk` QR mints a short-lived child session per scan |
 | `POST /detect` | Device's credential-ID hints + the session's booking → `returning` / `newDevice` / `firstTime`, recorded on the session |
+| `POST /identity/aadhaar/otp` \| `/verify` | Aadhaar OKYC through Sandbox as KUA: UIDAI sends the code, and returns name / date of birth / gender |
 | `POST /identity/verifications` | Records the one-time check. A device may not enrol without one in this session |
 | `POST /webauthn/registration/options` \| `/verify` | Discoverable platform credential, verified and stored with its COSE key |
 | `POST /webauthn/authentication/options` \| `/verify` | Empty `allowCredentials`, verified signature, sign-counter clone check |
@@ -367,12 +368,27 @@ returning one by the time they finish.
 **Challenges are single-use**, consumed by the `UPDATE ... RETURNING` that reads
 them, so a replay finds nothing rather than being compared and rejected.
 
-**`POST /identity/verifications` is an authorization gate, not a flow step.**
-It is the only thing standing between a scanned QR and enrolling a passkey
-against that reservation — and it is currently a stub that passes for anyone
-who calls it. Until a real KYC check sits behind it, someone who obtains a
-first-time booking QR can enrol their own passkey against that booking. That is
-the gap to close before this touches a real guest, not a detail.
+**The identity check is an authorization gate, not a flow step.** It is the only
+thing standing between a scanned QR and enrolling a passkey against that
+reservation. With a KUA configured, `startRegistration` accepts only a row the
+provider answered (`provider = 'sandbox'`), and the stub
+`POST /identity/verifications` — which passes for anyone who calls it — is
+refused with 403. Without credentials both stay open, which is what makes local
+work possible and what makes running that configuration in front of a guest
+unacceptable: anyone with a first-time booking QR could enrol their own passkey
+against it.
+
+**Aadhaar OKYC is real, and it costs money.** `SANDBOX_API_KEY` /
+`SANDBOX_API_SECRET` point at [sandbox.co.in](https://console.sandbox.co.in) as
+the licensed KUA. Every OTP is sent to a real mobile and every verification is a
+billed transaction, so the Verhoeff check runs before the call, not after. Absent
+those variables the two routes fall back to a simulation that flags itself
+`simulated: true` in its response and its audit event — and `config.js` refuses
+to boot with `NODE_ENV=production` in that state, because a missing env var must
+never turn an invented name into a `passed` verification. Consent is a required
+field on the *generate* call, which is why the tick sits beside the number rather
+than on the confirmation screen. The Aadhaar number is still never stored: it
+reaches UIDAI and a keyed hash, and nothing else.
 
 **Issuing ceremony options is not authentication.** Only a verified
 registration or assertion sets `checkin_sessions.guest_id`, which is what

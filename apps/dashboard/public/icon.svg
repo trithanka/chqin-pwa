@@ -1,17 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="ChqIn">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 258 120" fill="none" role="img" aria-label="ChqIn">
   <title>ChqIn</title>
-  <!--
-    The tab icon. A wordmark turns to mush at 16px, so this is the C and the
-    green bar only — two shapes that survive being a few pixels across.
-
-    No background: it sits on whatever the browser paints. The C follows the
-    viewer's theme, because a white C disappears on a light tab strip and a
-    dark one disappears on a dark strip.
-  -->
   <style>
     .c { stroke: #0F172A }
     @media (prefers-color-scheme: dark) { .c { stroke: #FFFFFF } }
   </style>
-  <path class="c" d="M32.6 16.9 A15 15 0 1 0 32.6 47.1" stroke-width="10" stroke-linecap="butt" />
-  <rect x="49" y="12" width="10" height="40" fill="#22DD66" />
+  <path
+    class="c"
+    d="M91.6 33.9 A40 40 0 1 0 91.6 86.1"
+    stroke-width="24"
+    stroke-linecap="butt"
+  />
+  <rect x="146" y="8" width="24" height="104" fill="#00E676" />
+  <path
+    d="M190 112 V70 a23 23 0 0 1 46 0 V112"
+    stroke="#00E676"
+    stroke-width="24"
+    stroke-linecap="butt"
+  />
 </svg>

@@ -13,7 +13,9 @@ import { failed, succeeded } from '../lib/haptics'
  * who'd rather not type twelve digits, and it hands off to the desk.
  *
  * Three beats: number → OTP → confirm what came back. The consent tick sits on
- * the last one, where the guest can see exactly what they're agreeing to share.
+ * the first one, next to the number: consent has to be given before the number
+ * reaches UIDAI, and the OKYC call carries it as a required field. The last beat
+ * confirms the record that came back is the right person, nothing more.
  */
 
 const CONSENT_TEXT =
@@ -26,6 +28,28 @@ const groupAadhaar = (value) =>
     .slice(0, 12)
     .replace(/(\d{4})(?=\d)/g, '$1 ')
     .trim()
+
+/** The agreement UIDAI requires before the number is sent, in the guest's words. */
+function ConsentTick({ checked, onChange }) {
+  return (
+    <label className="mt-1 flex cursor-pointer items-start gap-3">
+      <span className="relative mt-0.5 flex size-5 shrink-0 items-center justify-center">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          className="peer size-5 appearance-none rounded-md border-2 border-slate-300 transition-colors checked:border-blue-600 checked:bg-blue-600"
+        />
+        <Check
+          size={13}
+          strokeWidth={3.4}
+          className="pointer-events-none absolute text-white opacity-0 peer-checked:opacity-100"
+        />
+      </span>
+      <span className="text-[12.5px] leading-relaxed text-slate-600">{CONSENT_TEXT}</span>
+    </label>
+  )
+}
 
 export default function IdentityVerificationScreen({
   next,
@@ -56,7 +80,7 @@ export default function IdentityVerificationScreen({
   const digits = aadhaar.replace(/\s/g, '')
 
   const sendOtp = async () => {
-    if (busy || digits.length !== 12) return
+    if (busy || digits.length !== 12 || !consent) return
     setBusy(true)
     setError(null)
     try {
@@ -171,6 +195,8 @@ export default function IdentityVerificationScreen({
                   )}
                 </div>
 
+                <ConsentTick checked={consent} onChange={setConsent} />
+
                 {/* The secondary path, deliberately quieter */}
                 <button
                   type="button"
@@ -178,7 +204,7 @@ export default function IdentityVerificationScreen({
                     setScanning(true)
                     camera.start()
                   }}
-                  className="mt-1 inline-flex items-center gap-1.5 text-[13px] font-semibold text-slate-500 transition-colors hover:text-blue-600"
+                  className="mt-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-slate-500 transition-colors hover:text-blue-600"
                 >
                   <Camera size={15} strokeWidth={2.2} />
                   Scan the card instead
@@ -219,7 +245,7 @@ export default function IdentityVerificationScreen({
                 <p className="text-[13px] font-medium text-red-600">{error}</p>
               ) : (
                 <p className="text-[12.5px] text-slate-500">
-                  Prototype — any six digits are accepted.
+                  The code is valid for five minutes.
                 </p>
               )}
             </div>
@@ -267,29 +293,13 @@ export default function IdentityVerificationScreen({
                   >
                     <dt className="text-[12.5px] font-medium text-slate-400">{label}</dt>
                     <dd className="text-right text-[14px] font-semibold capitalize text-slate-900">
-                      {value}
+                      {/* A partial Aadhaar record can be missing a field; the row stays. */}
+                      {value || 'Not on record'}
                     </dd>
                   </div>
                 ))}
               </dl>
             </div>
-
-            <label className="mt-5 flex cursor-pointer items-start gap-3">
-              <span className="relative mt-0.5 flex size-5 shrink-0 items-center justify-center">
-                <input
-                  type="checkbox"
-                  checked={consent}
-                  onChange={(e) => setConsent(e.target.checked)}
-                  className="peer size-5 appearance-none rounded-md border-2 border-slate-300 transition-colors checked:border-blue-600 checked:bg-blue-600"
-                />
-                <Check
-                  size={13}
-                  strokeWidth={3.4}
-                  className="pointer-events-none absolute text-white opacity-0 peer-checked:opacity-100"
-                />
-              </span>
-              <span className="text-[12.5px] leading-relaxed text-slate-600">{CONSENT_TEXT}</span>
-            </label>
 
             {error && <p className="mt-3 text-[13px] font-medium text-red-600">{error}</p>}
           </motion.div>
@@ -301,7 +311,7 @@ export default function IdentityVerificationScreen({
           <PrimaryButton
             onClick={sendOtp}
             loading={busy}
-            disabled={digits.length !== 12}
+            disabled={digits.length !== 12 || !consent}
             icon={ArrowRight}
             tone="brand"
           >
@@ -322,7 +332,7 @@ export default function IdentityVerificationScreen({
         )}
 
         {stage === 'confirm' && (
-          <PrimaryButton onClick={next} disabled={!consent} icon={ArrowRight} tone="success">
+          <PrimaryButton onClick={next} icon={ArrowRight} tone="success">
             Yes, continue
           </PrimaryButton>
         )}

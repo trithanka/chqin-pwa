@@ -41,3 +41,9 @@ services:
         generateValue: true
       - key: PG_CA_CERT
         sync: false
+      # Without these the API refuses to boot in production: absent credentials
+      # mean identity checks would be simulated, which must never be silent.
+      - key: SANDBOX_API_KEY
+        sync: false
+      - key: SANDBOX_API_SECRET
+        sync: false
