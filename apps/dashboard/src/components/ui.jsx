@@ -1,4 +1,4 @@
-import { Check, LoaderCircle } from 'lucide-react'
+import { LoaderCircle } from 'lucide-react'
 
 /**
  * Dashboard primitives. Denser and quieter than the guest app's — this is a
@@ -130,51 +130,6 @@ export function EmptyState({ icon: Icon, title, body }) {
       <p className="text-[14px] font-semibold text-slate-700">{title}</p>
       <p className="max-w-[280px] text-[13px] leading-relaxed text-slate-500">{body}</p>
     </div>
-  )
-}
-
-/** The left rail's step list — state is carried by weight and colour, not icons alone. */
-export function StepRail({ steps, current, furthest, onJump }) {
-  return (
-    <ol className="flex flex-col gap-0.5">
-      {steps.map((step, i) => {
-        const done = i < furthest
-        const active = i === current
-        const reachable = i <= furthest
-
-        return (
-          <li key={step.key}>
-            <button
-              type="button"
-              disabled={!reachable}
-              onClick={() => onJump(i)}
-              className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
-                active ? 'bg-white/10' : reachable ? 'hover:bg-white/5' : 'cursor-default'
-              }`}
-            >
-              <span
-                className={`grid size-6 shrink-0 place-items-center rounded-full text-[11px] font-bold transition-colors ${
-                  done
-                    ? 'bg-emerald-500 text-white'
-                    : active
-                      ? 'bg-brand text-white'
-                      : 'border border-white/20 text-white/40'
-                }`}
-              >
-                {done ? <Check size={13} strokeWidth={3.2} /> : i + 1}
-              </span>
-              <span
-                className={`text-[13.5px] font-medium transition-colors ${
-                  active ? 'text-white' : reachable ? 'text-white/60' : 'text-white/30'
-                }`}
-              >
-                {step.label}
-              </span>
-            </button>
-          </li>
-        )
-      })}
-    </ol>
   )
 }
 

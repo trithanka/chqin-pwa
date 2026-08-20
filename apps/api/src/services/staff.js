@@ -29,7 +29,15 @@ import { conflict, notFound, unauthorized } from '../lib/errors.js'
 /* ------------------------------------------------------------------ */
 
 /** Creates the owner, the venue and its rooms in one transaction. */
-export async function register({ account, property, rooms: roomList }) {
+export async function register({
+  account,
+  property,
+  rooms: roomList,
+  business,
+  services,
+  essentials,
+  contacts,
+}) {
   const emailHmac = lookupHash(account.email)
 
   const existing = await db.query.staffUsers.findFirst({
@@ -55,6 +63,15 @@ export async function register({ account, property, rooms: roomList }) {
         location: [property.address, property.city].filter(Boolean).join(', ') || property.city,
         timezone: property.timezone ?? 'UTC',
         address: { line1: property.address ?? '', city: property.city, country: property.country },
+        // One column rather than four tables — nothing reads these by query
+        // yet. `verified: false` is the honest state: the owner typed the
+        // GSTIN, nobody checked it.
+        settings: {
+          business: { ...business, verified: false },
+          services: services ?? [],
+          essentials: essentials ?? {},
+          contacts: contacts ?? {},
+        },
       })
       .returning({ id: venues.id, name: venues.name })
 
@@ -68,8 +85,6 @@ export async function register({ account, property, rooms: roomList }) {
         .values(roomList.map((r) => ({ venueId: venue.id, number: r.number, roomType: r.type })))
     }
 
-    // Invitations are accepted and dropped on purpose: a table nobody reads
-    // yet is schema to migrate before it has a user.
     return { staffId: staff.id, venueId: venue.id, venueName: venue.name, name: staff.displayName }
   })
 }

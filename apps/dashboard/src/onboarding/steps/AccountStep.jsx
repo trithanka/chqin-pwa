@@ -1,6 +1,4 @@
-import { Field, Input, Select } from '../../components/ui'
-import PasswordField from '../../components/PasswordField'
-import StepHeader from '../../components/StepHeader'
+import { Field, Input, PasswordInput, Select, StepHeader } from '../kit'
 import { MIN_LENGTH } from '../../lib/password'
 
 /**
@@ -15,34 +13,33 @@ export default function AccountStep({ data, patch, errors }) {
   return (
     <div>
       <StepHeader
-        eyebrow="Step 1"
-        title="Create your account"
-        body="This is the person who owns the setup. You can invite the rest of the team in a moment."
+        title="Who will manage ChqIn?"
+        body="This is the person who owns the setup. You can add the rest of the team later."
       />
 
       <div className="flex flex-col gap-5">
-        <Field label="Your name" required error={errors.name}>
+        <Field label="Full name" error={errors.name}>
           <Input
             value={data.account.name}
             invalid={!!errors.name}
             onChange={(e) => set('name', e.target.value)}
-            placeholder="Priya Nair"
             autoComplete="name"
           />
         </Field>
 
-        <Field label="Work email" required error={errors.email} hint="This is what you'll sign in with.">
+        <Field label="Work email" error={errors.email} hint="This is what you'll sign in with.">
           <Input
             type="email"
+            inputMode="email"
             value={data.account.email}
             invalid={!!errors.email}
             onChange={(e) => set('email', e.target.value)}
-            placeholder="priya@hotelaurora.com"
             autoComplete="email"
+            autoCapitalize="none"
           />
         </Field>
 
-        <PasswordField
+        <PasswordInput
           label="Password"
           value={data.account.password}
           onChange={(value) => set('password', value)}
@@ -51,7 +48,7 @@ export default function AccountStep({ data, patch, errors }) {
           meter
         />
 
-        <PasswordField
+        <PasswordInput
           label="Confirm password"
           value={data.account.confirmPassword}
           onChange={(value) => set('confirmPassword', value)}

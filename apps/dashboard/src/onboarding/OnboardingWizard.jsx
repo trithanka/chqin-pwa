@@ -1,41 +1,85 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
-import { Button, StepRail } from '../components/ui'
+import { Button } from './kit'
+import { SERVICE } from './services'
 import { passwordProblem } from '../lib/password'
+import Logo from '../components/Logo'
 import AccountStep from './steps/AccountStep'
 import PropertyStep from './steps/PropertyStep'
+import BusinessStep from './steps/BusinessStep'
 import RoomsStep from './steps/RoomsStep'
-import TeamStep from './steps/TeamStep'
-import QrStep from './steps/QrStep'
+import ServicesStep from './steps/ServicesStep'
+import EssentialsStep from './steps/EssentialsStep'
+import RoutingStep from './steps/RoutingStep'
+import PreviewStep from './steps/PreviewStep'
 import LiveStep from './steps/LiveStep'
-import Logo from '../components/Logo'
 
 /**
- * Property onboarding — what a hotel does once, after clicking "onboard your
- * property" on the marketing site.
+ * Property onboarding — what a hotel does once, on a phone, usually standing
+ * at its own reception desk.
  *
- * UI only: nothing here talks to the API. Everything that can work locally
- * does (validation, adding rooms and invites, generating and printing the desk
- * card); only "Go live" is a stand-in.
+ * Phone-first for that reason: one question per screen, a sticky action at
+ * the bottom under the thumb, and a progress bar instead of a sidebar. On a
+ * desktop the same column is centred rather than stretched — a 620px form on
+ * a 1440px screen is a form with a lot of empty space next to it.
+ *
+ * Everything is collected locally and posted once at the end.
  */
 
 const STEPS = [
-  { key: 'account', label: 'Your account', Screen: AccountStep },
-  { key: 'property', label: 'Property details', Screen: PropertyStep },
+  { key: 'property', label: 'Property', Screen: PropertyStep },
+  { key: 'business', label: 'Business', Screen: BusinessStep },
   { key: 'rooms', label: 'Rooms', Screen: RoomsStep },
-  { key: 'team', label: 'Team', Screen: TeamStep },
-  { key: 'qr', label: 'Check-in QR', Screen: (props) => <QrStep {...props} preview /> },
+  { key: 'services', label: 'Services', Screen: ServicesStep },
+  { key: 'essentials', label: 'Essentials', Screen: EssentialsStep },
+  { key: 'routing', label: 'Teams', Screen: RoutingStep },
+  { key: 'account', label: 'Admin', Screen: AccountStep },
+  { key: 'preview', label: 'Preview', Screen: PreviewStep },
   { key: 'live', label: 'Go live', Screen: LiveStep, final: true },
 ]
 
 const BLANK = {
   account: { name: '', email: '', password: '', confirmPassword: '', role: 'owner' },
   property: { name: '', city: '', address: '', country: 'IN', timezone: 'Asia/Kolkata' },
+  business: { legalName: '', gstin: '' },
   rooms: [],
-  team: [],
+  services: ['food', 'water', 'housekeeping', 'laundry', 'maintenance'],
+  essentials: {
+    wifiSsid: '',
+    wifiPassword: '',
+    breakfastFrom: '',
+    breakfastTo: '',
+    checkoutTime: '',
+    notes: '',
+  },
+  // Per service, so food can go to the kitchen and laundry somewhere else.
+  contacts: {},
 }
 
 const STORAGE_KEY = 'chqin.onboarding.draft'
+
+/**
+ * Merges a saved draft onto BLANK one object at a time.
+ *
+ * A shallow spread would hand a step from an older version of this flow an
+ * object with keys it doesn't have, and the first `.trim()` on one of them
+ * throws. Every nested object gets its own merge for that reason.
+ */
+const mergeDraft = (saved) => ({
+  ...BLANK,
+  ...saved,
+  account: { ...BLANK.account, ...saved?.account },
+  property: { ...BLANK.property, ...saved?.property },
+  business: { ...BLANK.business, ...saved?.business },
+  essentials: { ...BLANK.essentials, ...saved?.essentials },
+  contacts: { ...saved?.contacts },
+  rooms: Array.isArray(saved?.rooms) ? saved.rooms : [],
+  // Keys, not just the array: a service dropped from the catalog would
+  // otherwise reach `SERVICE[key]` in three screens and throw on destructure.
+  services: Array.isArray(saved?.services)
+    ? saved.services.filter((s) => s in SERVICE)
+    : BLANK.services,
+})
 
 const loadDraft = () => {
   try {
@@ -46,17 +90,19 @@ const loadDraft = () => {
     // Position is part of the draft: coming back to step 1 with the answers
     // already filled in reads as a bug, not a feature.
     const furthest = Math.min(saved.furthest ?? 0, STEPS.length - 1)
-    const data = {
-      ...BLANK,
-      ...saved.data,
-      account: { ...BLANK.account, ...saved.data?.account },
-    }
+    const data = mergeDraft(saved.data)
 
-    // …except the password, which is never saved. Resuming past this step
-    // would carry an empty one all the way to "Go live" and fail there, which
-    // is how a wizard sends {"password": ""} to an API.
-    if (!data.account.password) {
-      return { data, stepIndex: 0, furthest: 0, resumed: Boolean(saved.data?.account?.email) }
+    // …except the password, which is never saved. Resuming past the account
+    // step would carry an empty one all the way to "Go live" and fail there,
+    // which is how a wizard sends {"password": ""} to an API.
+    const accountStep = STEPS.findIndex((s) => s.key === 'account')
+    if (!data.account.password && furthest >= accountStep) {
+      return {
+        data,
+        stepIndex: accountStep,
+        furthest: accountStep,
+        resumed: Boolean(saved.data?.account?.email),
+      }
     }
 
     return {
@@ -80,7 +126,6 @@ export default function OnboardingWizard({ onComplete }) {
   const [resumed, setResumed] = useState(draft.resumed)
 
   // Onboarding is long enough that a refresh mid-way shouldn't cost the work.
-  // With no backend, the draft lives in this browser only.
   useEffect(() => {
     try {
       // The password is deliberately not part of the draft: a credential left
@@ -95,6 +140,12 @@ export default function OnboardingWizard({ onComplete }) {
     }
   }, [data, stepIndex, furthest])
 
+  // A step change is a new screen, not a scroll position to keep.
+  useEffect(() => {
+    window.scrollTo({ top: 0 })
+  }, [stepIndex])
+
+  const accountStep = STEPS.findIndex((s) => s.key === 'account')
   const step = STEPS[stepIndex]
   const patch = (key, value) => setData((d) => ({ ...d, [key]: value }))
 
@@ -127,12 +178,6 @@ export default function OnboardingWizard({ onComplete }) {
     setStepIndex((i) => Math.max(0, i - 1))
   }
 
-  const jump = (to) => {
-    if (to > furthest) return
-    setShowErrors(false)
-    setStepIndex(to)
-  }
-
   const reset = () => {
     setResumed(false)
     setData(BLANK)
@@ -142,46 +187,47 @@ export default function OnboardingWizard({ onComplete }) {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col lg:flex-row">
-      {/* Left rail — where they are, and how much is left */}
-      <aside className="print-hide bg-rail px-7 py-8 lg:w-[310px] lg:shrink-0 lg:py-10">
-        <div className="flex items-center gap-2.5 text-white">
-          <Logo className="h-7 w-auto text-white" />
-          <span className="h-6 w-px bg-white/15" />
-          <p className="text-[12px] font-semibold tracking-[-0.01em] text-white/45">for business</p>
-        </div>
+    <div className="min-h-dvh bg-onb-bg text-onb-text">
+      <div className="mx-auto flex min-h-dvh w-full max-w-[560px] flex-col">
+        {/* Header — where you are, and the way back. Sticky, because the
+            answer to "which step is this" shouldn't need a scroll. */}
+        <header className="print-hide sticky top-0 z-10 bg-onb-bg/95 px-5 pt-safe backdrop-blur">
+          <div className="flex items-center gap-3 pb-3">
+            <button
+              type="button"
+              onClick={back}
+              disabled={stepIndex === 0}
+              aria-label="Back"
+              className="-ml-2 grid size-11 shrink-0 place-items-center rounded-xl text-onb-muted transition-colors disabled:opacity-0"
+            >
+              <ArrowLeft size={20} strokeWidth={2.4} />
+            </button>
 
-        <div className="mt-9 hidden lg:block">
-          <p className="mb-3 px-3 text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">
-            Set up your property
-          </p>
-          <StepRail steps={STEPS} current={stepIndex} furthest={furthest} onJump={jump} />
-        </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-onb-green">
+                {String(stepIndex + 1).padStart(2, '0')} · {step.label}
+              </p>
+              <p className="text-[12px] text-onb-muted">
+                Step {stepIndex + 1} of {STEPS.length}
+              </p>
+            </div>
 
-        {/* Compact progress on narrow screens, where the rail sits on top */}
-        <div className="mt-5 flex items-center gap-3 lg:hidden">
-          <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/15">
+            <Logo className="h-5 w-auto shrink-0 text-onb-text/70" />
+          </div>
+
+          <div className="h-1 overflow-hidden rounded-full bg-onb-line">
             <div
-              className="h-full rounded-full bg-brand transition-[width] duration-500"
+              className="h-full rounded-full bg-onb-green transition-[width] duration-500"
               style={{ width: `${((stepIndex + 1) / STEPS.length) * 100}%` }}
             />
           </div>
-          <span className="text-[12px] font-semibold text-white/50">
-            {stepIndex + 1}/{STEPS.length}
-          </span>
-        </div>
+        </header>
 
-        <p className="mt-10 hidden max-w-[220px] text-[12px] leading-relaxed text-white/35 lg:block">
-          Takes about five minutes. You can come back to anything later from
-          settings.
-        </p>
-      </aside>
-
-      {/* Content */}
-      <main className="flex flex-1 justify-center px-5 py-8 sm:px-10 lg:py-14">
-        <div className="w-full max-w-[620px]">
-          {resumed && stepIndex === 0 && (
-            <p className="mb-5 rounded-xl bg-brand-soft px-4 py-3 text-[13px] leading-relaxed text-brand">
+        <main className="flex-1 px-5 pt-6 pb-8">
+          {/* Only where it applies: the password field is on the account step,
+              and a banner about passwords on the rooms screen is noise. */}
+          {resumed && stepIndex === accountStep && (
+            <p className="mb-5 rounded-xl bg-onb-green-soft px-4 py-3 text-[13px] leading-relaxed text-onb-green">
               Picking up where you left off. Passwords aren't saved in the
               browser, so please set yours again.
             </p>
@@ -199,41 +245,42 @@ export default function OnboardingWizard({ onComplete }) {
                 setShowErrors(true)
                 throw new Error('Some details are missing. Check the highlighted fields.')
               }
-              return onComplete?.(payload)
+              const result = await onComplete?.(payload)
+              // The property exists now. Leaving the draft behind means
+              // reopening /register pre-fills a wizard that can only 409.
+              try {
+                localStorage.removeItem(STORAGE_KEY)
+              } catch {
+                /* private mode — nothing was saved to remove */
+              }
+              return result
             }}
           />
+        </main>
 
-          {!step.final && (
-            <div className="print-hide mt-9 flex items-center justify-between gap-3 border-t border-slate-200/80 pt-6">
-              {stepIndex > 0 ? (
-                <Button tone="ghost" icon={ArrowLeft} onClick={back}>
-                  Back
-                </Button>
-              ) : (
-                <span />
-              )}
-
-              <div className="flex items-center gap-2.5">
-                {!canContinue && showErrors && (
-                  <span className="text-[13px] font-medium text-red-600">
-                    Check the fields above
-                  </span>
-                )}
-                <Button iconRight={ArrowRight} onClick={next}>
-                  {stepIndex === STEPS.length - 2 ? 'Finish setup' : 'Continue'}
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-      </main>
+        {/* The action, pinned under the thumb and clear of the home indicator. */}
+        {!step.final && (
+          <div className="print-hide sticky bottom-0 border-t border-onb-line bg-onb-bg/95 px-5 pt-3 pb-safe backdrop-blur">
+            {!canContinue && showErrors && (
+              <p className="mb-2 text-center text-[13px] font-medium text-red-400">
+                Check the highlighted fields above
+              </p>
+            )}
+            <Button iconRight={ArrowRight} onClick={next} className="w-full">
+              {stepIndex === STEPS.length - 2 ? 'Looks good' : 'Continue'}
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
 
 /* ------------------------------------------------------------------ */
-/* Validation — the same shapes the API's zod schemas will enforce     */
+/* Validation — the same shapes the API's zod schemas enforce          */
 /* ------------------------------------------------------------------ */
+
+const PHONE = /^\+?[0-9][0-9 -]{7,17}$/
 
 function validate(stepKey, data) {
   const errors = {}
@@ -253,10 +300,31 @@ function validate(stepKey, data) {
     if (!data.property.city.trim()) errors.city = 'Which city is it in?'
   }
 
+  if (stepKey === 'business') {
+    // Optional — a small guesthouse may have no GST registration at all. But a
+    // GSTIN that is typed has to be a GSTIN.
+    const gstin = data.business.gstin.trim()
+    if (gstin && !/^[0-9A-Z]{15}$/.test(gstin.toUpperCase())) {
+      errors.gstin = 'A GSTIN is 15 characters, like 18ABCDE1234F1Z5.'
+    }
+  }
+
   if (stepKey === 'rooms' && data.rooms.length === 0) {
     errors.rooms = 'Add at least one room.'
   }
 
-  // Team is optional: a single owner running a small property is legitimate.
+  if (stepKey === 'services' && data.services.length === 0) {
+    errors.services = 'Pick at least one — this is what a guest can ask for.'
+  }
+
+  // A service with nowhere to send its requests is a request that vanishes.
+  if (stepKey === 'routing') {
+    for (const service of data.services) {
+      const number = (data.contacts[service] ?? '').trim()
+      if (!number) errors[service] = 'Add a number, or use the reception one.'
+      else if (!PHONE.test(number)) errors[service] = 'Include the country code, like +91 98765 43210.'
+    }
+  }
+
   return errors
 }

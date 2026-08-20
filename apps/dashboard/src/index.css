@@ -39,6 +39,22 @@
 
   --shadow-panel: 0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 32px rgba(15, 23, 42, 0.06);
   --shadow-raised: 0 10px 30px rgba(37, 99, 235, 0.22);
+
+  /* Onboarding only.
+     Setup happens once, on a phone, standing at a reception desk — it reads
+     as an app, not as the desk tool the rest of the dashboard is. Kept under
+     its own prefix so `brand`/`slate` stay exactly what Today, Bookings and
+     Guests already expect. */
+  --color-onb-bg: #060a08;
+  --color-onb-surface: #0d1310;
+  --color-onb-raised: #121a16;
+  --color-onb-line: #1e2a23;
+  --color-onb-text: #e8f0ea;
+  --color-onb-muted: #7c8d84;
+  --color-onb-green: #22c55e;
+  --color-onb-green-dark: #16a34a;
+  --color-onb-green-soft: #12291c;
+  --color-onb-ink: #04140a;
 }
 
 @layer base {
@@ -52,6 +68,14 @@
 
   button {
     font-family: inherit;
+  }
+
+  /* 16px or larger, or iOS zooms the page when a field takes focus — the one
+     thing that makes a form feel like a website on a phone. */
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1em);
   }
 
   /* Room numbers and counts sit in columns — keep the digits aligned. */
@@ -94,5 +118,22 @@
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Onboarding is the one screen used on a phone held in a hand, so it is the
+   one screen that has to clear the notch and the home indicator. */
+@utility pt-safe {
+  padding-top: max(var(--pt-safe-min, 0.75rem), calc(env(safe-area-inset-top) + 0.5rem));
+}
+
+@utility pb-safe {
+  padding-bottom: max(var(--pb-safe-min, 1rem), calc(env(safe-area-inset-bottom) + 0.5rem));
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
   }
 }

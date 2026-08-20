@@ -16,7 +16,7 @@ export default function Layout() {
 
   return (
     <div className="flex min-h-dvh flex-col lg:flex-row">
-      <aside className="flex shrink-0 flex-col bg-rail px-4 py-5 lg:w-[248px] lg:px-4 lg:py-6">
+      <aside className="print-hide flex shrink-0 flex-col bg-rail px-4 py-5 lg:w-[248px] lg:px-4 lg:py-6">
         <div className="mb-6 flex items-center gap-2.5 px-2 text-white">
           <Logo className="h-6.5 w-auto shrink-0 text-white" />
           <div className="min-w-0 leading-tight">

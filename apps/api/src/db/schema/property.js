@@ -45,6 +45,10 @@ export const venues = pgTable(
     // Cut-offs run on the venue's local time, not the arriving guest's.
     timezone: text('timezone').notNull().default('UTC'),
     address: jsonb('address').notNull().default({}),
+    // Everything onboarding collects that nothing queries by yet: services
+    // offered, guest-facing essentials (wifi, breakfast, check-out), the
+    // business registration, and per-service contact numbers.
+    settings: jsonb('settings').notNull().default({}),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

@@ -152,3 +152,32 @@ export const apiError = z.object({
   error: z.string(),
   message: z.string(),
 })
+
+/* ------------------------------------------------------------------ */
+/* Guest services — what a property offers, and who it routes to       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The requests a guest can raise from their room. Chosen at onboarding, and
+ * the same keys the room screen renders and the routing table keys on — a
+ * property that never turns on `spa` never shows the tile.
+ */
+export const GUEST_SERVICES = [
+  'food',
+  'water',
+  'housekeeping',
+  'laundry',
+  'maintenance',
+  'cab',
+  'spa',
+  'luggage',
+  'wakeup',
+]
+
+export const guestServiceSchema = z.enum(GUEST_SERVICES)
+
+/** A phone number as typed, in the one shape WhatsApp routing can dial. */
+export const phoneSchema = z
+  .string()
+  .trim()
+  .regex(/^\+?[0-9][0-9 -]{7,17}$/, 'Enter a phone number with country code.')

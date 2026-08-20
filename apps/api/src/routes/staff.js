@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { z } from 'zod'
+import { guestServiceSchema, phoneSchema } from '@chqin/shared'
 import { body } from '../lib/validate.js'
 import { unauthorized } from '../lib/errors.js'
 import { COOKIE, cookieOptions, issue, read } from '../lib/session.js'
@@ -41,8 +42,31 @@ const registerRequest = z.object({
     .array(z.object({ number: z.string().min(1).max(16), type: z.string().max(40).optional() }))
     .max(500)
     .default([]),
-  // Accepted and ignored — see services/staff.js.
-  team: z.array(z.object({ email: z.email(), role: z.string() })).max(100).default([]),
+  // The registration a hotel is legally operating under. Typed by the owner;
+  // the document upload behind it isn't read yet, so nothing here is claimed
+  // to be verified.
+  business: z
+    .object({
+      legalName: z.string().max(160).optional(),
+      gstin: z.string().max(20).optional(),
+    })
+    .default({}),
+  // Which request tiles the guest sees in their room.
+  services: z.array(guestServiceSchema).max(20).default([]),
+  // The questions every guest asks the desk, answered once.
+  essentials: z
+    .object({
+      wifiSsid: z.string().max(64).optional(),
+      wifiPassword: z.string().max(64).optional(),
+      breakfastFrom: z.string().max(8).optional(),
+      breakfastTo: z.string().max(8).optional(),
+      checkoutTime: z.string().max(8).optional(),
+      notes: z.string().max(500).optional(),
+    })
+    .default({}),
+  // Where each service's requests go. Keyed by service so a property can send
+  // food to the kitchen and laundry somewhere else without a second concept.
+  contacts: z.partialRecord(guestServiceSchema, phoneSchema).default({}),
 })
 
 const loginRequest = z.object({

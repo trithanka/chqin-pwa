@@ -1,5 +1,4 @@
-import { Field, Input, Select } from '../../components/ui'
-import StepHeader from '../../components/StepHeader'
+import { Field, Input, Select, StepHeader } from '../kit'
 
 // Enough to cover the markets a first deployment plausibly touches. The list
 // grows when a property outside it signs up, not before.
@@ -17,62 +16,60 @@ export default function PropertyStep({ data, patch, errors }) {
   return (
     <div>
       <StepHeader
-        eyebrow="Step 2"
-        title="Tell us about the property"
+        title="Confirm your property"
         body="Guests see the name and city on the welcome screen after they scan."
       />
 
       <div className="flex flex-col gap-5">
-        <Field label="Property name" required error={errors.name}>
+        <Field label="Property name" error={errors.name}>
           <Input
             value={data.property.name}
             invalid={!!errors.name}
             onChange={(e) => set('name', e.target.value)}
-            placeholder="Hotel Aurora"
           />
         </Field>
 
-        <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="City" required error={errors.city}>
-            <Input
-              value={data.property.city}
-              invalid={!!errors.city}
-              onChange={(e) => set('city', e.target.value)}
-              placeholder="Mumbai"
-            />
-          </Field>
-
-          <Field label="Country">
-            <Select value={data.property.country} onChange={(e) => set('country', e.target.value)}>
-              <option value="IN">India</option>
-              <option value="AE">United Arab Emirates</option>
-              <option value="SG">Singapore</option>
-              <option value="GB">United Kingdom</option>
-              <option value="US">United States</option>
-            </Select>
-          </Field>
-        </div>
+        <Field label="City" error={errors.city}>
+          <Input
+            value={data.property.city}
+            invalid={!!errors.city}
+            onChange={(e) => set('city', e.target.value)}
+          />
+        </Field>
 
         <Field label="Street address" hint="Shown on the check-in confirmation and receipts.">
           <Input
             value={data.property.address}
             onChange={(e) => set('address', e.target.value)}
-            placeholder="Linking Road, Bandra West"
           />
         </Field>
 
-        <Field
-          label="Time zone"
-          hint="Check-in and check-out cut-offs run on the property's local time, not the guest's."
-        >
-          <Select value={data.property.timezone} onChange={(e) => set('timezone', e.target.value)}>
-            {TIMEZONES.map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Country">
+            <Select value={data.property.country} onChange={(e) => set('country', e.target.value)}>
+              <option value="IN">India</option>
+              <option value="AE">UAE</option>
+              <option value="SG">Singapore</option>
+              <option value="GB">UK</option>
+              <option value="US">US</option>
+            </Select>
+          </Field>
+
+          <Field label="Time zone">
+            <Select value={data.property.timezone} onChange={(e) => set('timezone', e.target.value)}>
+              {TIMEZONES.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+
+        <p className="text-[13px] leading-relaxed text-onb-muted">
+          Check-in and check-out cut-offs run on the property's local time, not
+          the guest's.
+        </p>
       </div>
     </div>
   )
