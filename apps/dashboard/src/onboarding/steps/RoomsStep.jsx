@@ -107,6 +107,9 @@ export default function RoomsStep({ data, patch, errors }) {
           )}
         </div>
 
+        {/* Labelled by what it will do, not by what it is. "Add another
+            range" on an empty list reads as the button for a range you have
+            not added yet, and leaves no button that adds this one. */}
         <Button
           tone="secondary"
           icon={Plus}
@@ -114,7 +117,11 @@ export default function RoomsStep({ data, patch, errors }) {
           disabled={!!plan.error || plan.numbers.length === 0}
           className="mt-4 w-full"
         >
-          Add another range
+          {plan.numbers.length === 1
+            ? 'Add this room'
+            : plan.numbers.length > 1
+              ? `Add these ${plan.numbers.length} rooms`
+              : 'Add rooms'}
         </Button>
       </Card>
 
@@ -158,7 +165,7 @@ export default function RoomsStep({ data, patch, errors }) {
       <div className="mt-6">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-[15px] font-bold tracking-[-0.02em] text-onb-text">
-            {data.rooms.length} room{data.rooms.length === 1 ? '' : 's'} found
+            {data.rooms.length} room{data.rooms.length === 1 ? '' : 's'} added
           </h2>
           <div className="flex flex-wrap justify-end gap-1.5">
             {Object.entries(byType).map(([type, count]) => (

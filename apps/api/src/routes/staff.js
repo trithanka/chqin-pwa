@@ -37,6 +37,10 @@ const registerRequest = z.object({
     address: z.string().max(240).optional(),
     country: z.string().max(2).optional(),
     timezone: z.string().default('UTC'),
+    // Present when the property was picked from place search rather than
+    // typed. Kept so a map pin never has to be geocoded from a string later.
+    lat: z.number().min(-90).max(90).optional(),
+    lng: z.number().min(-180).max(180).optional(),
   }),
   rooms: z
     .array(z.object({ number: z.string().min(1).max(16), type: z.string().max(40).optional() }))

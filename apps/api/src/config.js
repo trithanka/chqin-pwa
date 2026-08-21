@@ -65,6 +65,13 @@ const schema = z.object({
    * Live keys only work against the production host; test keys only against
    * test-api. A mismatched pair fails at /authenticate, looking like a bad key.
    */
+  /**
+   * Identifies this deployment to Nominatim, whose usage policy asks for a way
+   * to contact whoever is making the requests. A shared or absent identity is
+   * what gets an application blocked.
+   */
+  CONTACT_URL: z.string().default('https://chqin.in'),
+
   SANDBOX_API_KEY: z.string().optional(),
   SANDBOX_API_SECRET: z.string().optional(),
   SANDBOX_BASE_URL: z.string().default('https://api.sandbox.co.in'),

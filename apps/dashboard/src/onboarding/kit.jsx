@@ -179,13 +179,14 @@ export function Pill({ children, tone = 'neutral' }) {
  * A document the property can hand over — and an honest label on what happens
  * to it.
  *
- * ponytail: the file is held in the browser and never uploaded. There is no
- * upload route, no storage and no extraction in the API, so the card says
- * "we'll read it and confirm with you" instead of printing line items nobody
- * parsed. Wire it to a real POST /staff/documents + extraction job to make it
- * true.
+ * ponytail: the file is held in the browser and never uploaded — there is no
+ * upload route and no storage in the API. Where a caller can read the file
+ * locally (the GST certificate's PDF text layer) it passes a `status` line
+ * saying what it found; where it can't, the card says so instead of printing
+ * line items nobody parsed. Wire it to a real POST /staff/documents when the
+ * file itself needs to be kept.
  */
-export function UploadCard({ label, hint, accept, file, onFile }) {
+export function UploadCard({ label, hint, accept, file, onFile, status }) {
   return (
     <div className="rounded-2xl border border-dashed border-onb-line bg-onb-surface p-4">
       <label className="flex cursor-pointer items-center gap-3">
@@ -209,10 +210,14 @@ export function UploadCard({ label, hint, accept, file, onFile }) {
       </label>
 
       {file && (
-        <p className="mt-3 rounded-xl bg-onb-raised px-3 py-2.5 text-[12.5px] leading-relaxed text-onb-muted">
-          Kept on this device for now. Uploading and reading documents isn't
-          switched on yet — until it is, type the details below yourself.
-        </p>
+        <div className="mt-3 rounded-xl bg-onb-raised px-3 py-2.5">
+          {status ?? (
+            <p className="text-[12.5px] leading-relaxed text-onb-muted">
+              Kept on this device for now — attaching it doesn't send it
+              anywhere yet.
+            </p>
+          )}
+        </div>
       )}
     </div>
   )

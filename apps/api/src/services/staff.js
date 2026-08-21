@@ -62,7 +62,14 @@ export async function register({
         kind: property.kind ?? 'hotel',
         location: [property.address, property.city].filter(Boolean).join(', ') || property.city,
         timezone: property.timezone ?? 'UTC',
-        address: { line1: property.address ?? '', city: property.city, country: property.country },
+        address: {
+          line1: property.address ?? '',
+          city: property.city,
+          country: property.country,
+          ...(property.lat != null && property.lng != null
+            ? { lat: property.lat, lng: property.lng }
+            : {}),
+        },
         // One column rather than four tables — nothing reads these by query
         // yet. `verified: false` is the honest state: the owner typed the
         // GSTIN, nobody checked it.

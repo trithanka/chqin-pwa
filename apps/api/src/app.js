@@ -7,6 +7,7 @@ import { handleError } from './lib/errors.js'
 import { checkin } from './routes/checkin.js'
 import { detect } from './routes/detect.js'
 import { identity } from './routes/identity.js'
+import { places } from './routes/places.js'
 import { sessions } from './routes/sessions.js'
 import { staff } from './routes/staff.js'
 import { webauthn } from './routes/webauthn.js'
@@ -24,7 +25,44 @@ import { webauthn } from './routes/webauthn.js'
 
 export const app = new Hono()
 
-app.use('/*', cors({ origin: config.ORIGINS, credentials: true }))
+/**
+ * A private-network address, the kind Vite prints as its "Network" URL.
+ *
+ * Testing onboarding on an actual phone means opening the dashboard at
+ * http://10.x.x.x:5174, and that origin is not in ORIGINS — the request is
+ * refused at the preflight and looks like the API is broken. Allowing it in
+ * development is the difference between testing on a phone and not.
+ */
+const privateOrigin = (origin) => {
+  let host
+  try {
+    ;({ hostname: host } = new URL(origin))
+  } catch {
+    return false
+  }
+  return (
+    host.startsWith('10.') ||
+    host.startsWith('192.168.') ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+    host.endsWith('.local')
+  )
+}
+
+app.use(
+  '/*',
+  cors({
+    // Never in production: there the allowed origin is exactly what ORIGINS
+    // says, because a wildcard with credentials is how a session gets read by
+    // a site that isn't ours.
+    origin: (origin) =>
+      config.ORIGINS.includes(origin)
+        ? origin
+        : process.env.NODE_ENV !== 'production' && privateOrigin(origin)
+          ? origin
+          : null,
+    credentials: true,
+  }),
+)
 
 /**
  * Health, with enough detail to diagnose a deploy.
@@ -58,6 +96,9 @@ app.route('/detect', detect)
 app.route('/identity', identity)
 app.route('/webauthn', webauthn)
 app.route('/checkin', checkin)
+
+// Place lookup for onboarding. Public: it runs before an account exists.
+app.route('/places', places)
 
 // The venue-facing surface. Guest routes are semi-public — a QR token is the
 // entry ticket; these need an account, and every read filters by venue.

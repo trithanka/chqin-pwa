@@ -1,4 +1,7 @@
-import { Card, Field, Input, StepHeader } from '../kit'
+import { useCallback, useState } from 'react'
+import { QrCode } from 'lucide-react'
+import { Button, Card, Field, Input, StepHeader } from '../kit'
+import WifiScanner from '../WifiScanner'
 
 /**
  * The four things every guest asks the desk. Answered once here, and shown in
@@ -7,7 +10,18 @@ import { Card, Field, Input, StepHeader } from '../kit'
  * All optional: a property that leaves wifi blank simply doesn't show it.
  */
 export default function EssentialsStep({ data, patch }) {
+  const [scanning, setScanning] = useState(false)
   const set = (key, value) => patch('essentials', { ...data.essentials, [key]: value })
+
+  // Both fields at once, which is the only part of this a scan can do better
+  // than typing: the network name alone was never the slow half.
+  const applyWifi = useCallback(
+    ({ ssid, password }) => {
+      patch('essentials', { ...data.essentials, wifiSsid: ssid, wifiPassword: password })
+      setScanning(false)
+    },
+    [data.essentials, patch],
+  )
 
   return (
     <div>
@@ -36,7 +50,17 @@ export default function EssentialsStep({ data, patch }) {
             spellCheck={false}
           />
         </Field>
+
+        <Button tone="secondary" icon={QrCode} onClick={() => setScanning(true)} className="w-full">
+          Scan Wi-Fi QR
+        </Button>
+        <p className="-mt-3 text-[12.5px] leading-relaxed text-onb-muted">
+          Fills both from the QR on your router, or from another phone's
+          "Share Wi-Fi" code.
+        </p>
       </Card>
+
+      {scanning && <WifiScanner onFound={applyWifi} onClose={() => setScanning(false)} />}
 
       <Card className="mt-3 flex flex-col gap-5 p-4">
         <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-onb-green">
