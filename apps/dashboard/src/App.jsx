@@ -6,6 +6,7 @@ import TodayPage from './dashboard/TodayPage'
 import BookingsPage, { BookingDetailPage } from './dashboard/BookingsPage'
 import GuestsPage, { GuestDetailPage } from './dashboard/GuestsPage'
 import CodePage from './dashboard/CodePage'
+import SettingsPage from './dashboard/SettingsPage'
 import { useSession } from './session'
 
 /**
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="guests" element={<GuestsPage />} />
         <Route path="guests/:id" element={<GuestDetailPage />} />
         <Route path="code" element={<CodePage />} />
+        <Route path="settings" element={<SettingsPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

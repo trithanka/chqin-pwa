@@ -9,6 +9,8 @@ import {
   checkinCode,
   getBooking,
   getGuest,
+  getSettings,
+  saveSettings,
   listBookings,
   listGuests,
   login,
@@ -22,6 +24,34 @@ export const staff = new Hono()
 /* ------------------------------------------------------------------ */
 /* Contracts                                                           */
 /* ------------------------------------------------------------------ */
+
+/**
+ * What a property offers, and where each request goes.
+ *
+ * Shared between registration and the settings screen deliberately: the same
+ * three fields, written by two screens. A second hand-written copy is how the
+ * dashboard ends up accepting a shape onboarding rejects.
+ */
+const settingsShape = {
+  // Which request tiles the guest sees in their room.
+  services: z.array(guestServiceSchema).max(20).default([]),
+  // The questions every guest asks the desk, answered once.
+  essentials: z
+    .object({
+      wifiSsid: z.string().max(64).optional(),
+      wifiPassword: z.string().max(64).optional(),
+      breakfastFrom: z.string().max(8).optional(),
+      breakfastTo: z.string().max(8).optional(),
+      checkoutTime: z.string().max(8).optional(),
+      notes: z.string().max(500).optional(),
+    })
+    .default({}),
+  // Where each service's requests go. Keyed by service so a property can send
+  // food to the kitchen and laundry somewhere else without a second concept.
+  contacts: z.partialRecord(guestServiceSchema, phoneSchema).default({}),
+}
+
+const settingsRequest = z.object(settingsShape)
 
 const registerRequest = z.object({
   account: z.object({
@@ -55,22 +85,7 @@ const registerRequest = z.object({
       gstin: z.string().max(20).optional(),
     })
     .default({}),
-  // Which request tiles the guest sees in their room.
-  services: z.array(guestServiceSchema).max(20).default([]),
-  // The questions every guest asks the desk, answered once.
-  essentials: z
-    .object({
-      wifiSsid: z.string().max(64).optional(),
-      wifiPassword: z.string().max(64).optional(),
-      breakfastFrom: z.string().max(8).optional(),
-      breakfastTo: z.string().max(8).optional(),
-      checkoutTime: z.string().max(8).optional(),
-      notes: z.string().max(500).optional(),
-    })
-    .default({}),
-  // Where each service's requests go. Keyed by service so a property can send
-  // food to the kitchen and laundry somewhere else without a second concept.
-  contacts: z.partialRecord(guestServiceSchema, phoneSchema).default({}),
+  ...settingsShape,
 })
 
 const loginRequest = z.object({
@@ -132,3 +147,11 @@ staff.get('/bookings/:id', async (c) => c.json(await getBooking(venueOf(c), c.re
 staff.get('/guests', async (c) => c.json({ guests: await listGuests(venueOf(c)) }))
 
 staff.get('/guests/:id', async (c) => c.json(await getGuest(venueOf(c), c.req.param('id'))))
+
+staff.get('/settings', async (c) => c.json(await getSettings(venueOf(c))))
+
+// POST rather than PUT: the dashboard client speaks get and post, and one
+// verb's worth of REST purity isn't worth a fourth method on it.
+staff.post('/settings', body(settingsRequest), async (c) =>
+  c.json(await saveSettings(venueOf(c), c.get('body'))),
+)

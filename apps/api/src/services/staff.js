@@ -367,3 +367,61 @@ export async function getGuest(venueId, id) {
 
   return { ...guest, devices, identityCheckedAt: verification?.verifiedAt ?? null, stays }
 }
+
+/* ------------------------------------------------------------------ */
+/* Settings — what the property offers                                 */
+/* ------------------------------------------------------------------ */
+
+/** The editable slice of `venues.settings`. `business` is not edited here. */
+export async function getSettings(venueId) {
+  const [venue] = await db
+    .select({ settings: venues.settings })
+    .from(venues)
+    .where(eq(venues.id, venueId))
+    .limit(1)
+
+  if (!venue) throw notFound('That property no longer exists.')
+
+  const settings = venue.settings ?? {}
+  return {
+    services: Array.isArray(settings.services) ? settings.services : [],
+    essentials: settings.essentials ?? {},
+    contacts: settings.contacts ?? {},
+  }
+}
+
+/**
+ * The three fields the settings screen owns, laid over what is already there.
+ *
+ * A merge rather than a replacement: the column is one JSON blob that also
+ * holds `business` (the GSTIN and the registration name), which no screen here
+ * edits and nothing on the guest side reads — so overwriting the column would
+ * delete it silently, and stay unnoticed until someone looked for the GSTIN.
+ */
+export function mergeSettings(existing, { services, essentials, contacts }) {
+  // A service with no number behind it is a tile the guest never sees
+  // (services/stay.js drops it), so the numbers of services that were turned
+  // off are dropped here rather than kept as orphans in the column.
+  const kept = Object.fromEntries(
+    Object.entries(contacts).filter(([key, number]) => services.includes(key) && number),
+  )
+
+  return { ...(existing ?? {}), services, essentials, contacts: kept }
+}
+
+export async function saveSettings(venueId, patch) {
+  const [venue] = await db
+    .select({ settings: venues.settings })
+    .from(venues)
+    .where(eq(venues.id, venueId))
+    .limit(1)
+
+  if (!venue) throw notFound('That property no longer exists.')
+
+  const settings = mergeSettings(venue.settings, patch)
+
+  await db.update(venues).set({ settings }).where(eq(venues.id, venueId))
+
+  const { business: _business, ...editable } = settings
+  return editable
+}

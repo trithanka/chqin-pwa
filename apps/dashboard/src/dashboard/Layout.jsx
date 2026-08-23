@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { CalendarCheck, LayoutDashboard, LogOut, QrCode, Users } from 'lucide-react'
+import { CalendarCheck, LayoutDashboard, LogOut, QrCode, Settings, Users } from 'lucide-react'
 import { useSession } from '../session'
 import Logo from '../components/Logo'
 
@@ -8,6 +8,7 @@ const NAV = [
   { to: '/app/bookings', label: 'Bookings', icon: CalendarCheck },
   { to: '/app/guests', label: 'Guests', icon: Users },
   { to: '/app/code', label: 'Check-in code', icon: QrCode },
+  { to: '/app/settings', label: 'Settings', icon: Settings },
 ]
 
 export default function Layout() {
