@@ -69,7 +69,10 @@ export async function enrolDevice(sessionId, verificationId) {
 
 /** Prove an enrolled passkey. The server checks the signature; we don't. */
 export async function authenticate(sessionId) {
-  const { challengeId, options } = await api.authenticationOptions(sessionId)
+  const { challengeId, options } = await api.authenticationOptions(
+    sessionId,
+    knownCredentialIds(),
+  )
   const credential = await runAuthentication(options)
   return api.authenticationVerify({ sessionId, challengeId, credential })
 }

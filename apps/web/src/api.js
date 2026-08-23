@@ -49,7 +49,8 @@ export const api = {
   registrationOptions: (sessionId, verificationId) =>
     request('/webauthn/registration/options', { sessionId, verificationId }),
   registrationVerify: (payload) => request('/webauthn/registration/verify', payload),
-  authenticationOptions: (sessionId) => request('/webauthn/authentication/options', { sessionId }),
+  authenticationOptions: (sessionId, knownCredentialIds) =>
+    request('/webauthn/authentication/options', { sessionId, knownCredentialIds }),
   authenticationVerify: (payload) => request('/webauthn/authentication/verify', payload),
   checkin: (sessionId, idempotencyKey, stay) =>
     request('/checkin', { sessionId, idempotencyKey, ...(stay ? { stay } : {}) }),

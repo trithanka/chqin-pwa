@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import {
   generateAuthenticationOptions,
   generateRegistrationOptions,
@@ -242,12 +242,34 @@ export function finishRegistration(session, { challengeId, credential, deviceLab
 /* Authentication                                                      */
 /* ------------------------------------------------------------------ */
 
-export async function startAuthentication(session) {
+export async function startAuthentication(session, knownCredentialIds = []) {
+  /**
+   * The device's own hint, narrowed to credentials this server still holds.
+   *
+   * Left empty, the OS offers every passkey saved for this site — including
+   * ones whose row is gone, which the guest can pick and which can only fail
+   * as `unknown_credential`. Nothing leaks: these IDs came from this device,
+   * and an ID the server dropped simply isn't offered back.
+   */
+  const live = knownCredentialIds.length
+    ? await db
+        .select({ id: credentials.credentialId, transports: credentials.transports })
+        .from(credentials)
+        .innerJoin(guests, eq(guests.id, credentials.guestId))
+        .where(
+          and(
+            inArray(credentials.credentialId, knownCredentialIds),
+            isNull(credentials.revokedAt),
+            eq(guests.status, 'active'),
+          ),
+        )
+    : []
+
   const options = await generateAuthenticationOptions({
     rpID: config.RP_ID,
-    // Empty: any discoverable credential for this site. Naming credentials
-    // here would leak which guests have enrolled on this device.
-    allowCredentials: [],
+    // Empty when the device has no usable hint: any discoverable credential
+    // for this site, which is the only thing left to try.
+    allowCredentials: live.map((c) => ({ id: c.id, transports: c.transports ?? undefined })),
     userVerification: 'required',
   })
 

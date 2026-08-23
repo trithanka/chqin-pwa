@@ -110,6 +110,7 @@ export const registrationVerifyRequest = z.object({
 
 export const authenticationOptionsRequest = z.object({
   sessionId: z.uuid(),
+  knownCredentialIds: z.array(z.string()).max(20).default([]),
 })
 
 export const authenticationVerifyRequest = z.object({

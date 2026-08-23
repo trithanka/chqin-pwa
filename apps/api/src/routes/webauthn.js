@@ -56,8 +56,9 @@ webauthn.post('/registration/verify', body(registrationVerifyRequest), async (c)
 })
 
 webauthn.post('/authentication/options', body(authenticationOptionsRequest), async (c) => {
-  const session = await requireOpen(c.get('body').sessionId)
-  return c.json(await startAuthentication(session))
+  const { sessionId, knownCredentialIds } = c.get('body')
+  const session = await requireOpen(sessionId)
+  return c.json(await startAuthentication(session, knownCredentialIds))
 })
 
 webauthn.post('/authentication/verify', body(authenticationVerifyRequest), async (c) => {
