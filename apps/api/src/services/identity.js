@@ -3,7 +3,7 @@ import { db } from '../db/client.js'
 import { identityVerifications } from '../db/schema/index.js'
 import { lookupHash } from '../lib/crypto.js'
 import { ApiError, notFound } from '../lib/errors.js'
-import { generateOkycOtp, sandboxConfigured, verifyOkycOtp } from '../lib/sandbox.js'
+import { generateOkycOtp, liveAadhaar, verifyOkycOtp } from '../lib/sandbox.js'
 
 /**
  * Aadhaar identity verification, through Sandbox (sandbox.co.in) as KUA.
@@ -64,7 +64,7 @@ export async function requestAadhaarOtp(session, aadhaar) {
     throw new ApiError('invalid_aadhaar', "That doesn't look like a valid Aadhaar number.", 400)
   }
 
-  const live = sandboxConfigured()
+  const live = liveAadhaar()
   const providerRef = live ? (await generateOkycOtp(digits)).referenceId : null
 
   const [row] = await db
@@ -126,10 +126,10 @@ export async function verifyAadhaarOtp(session, { requestId, otp, consent }) {
 
   const live = pending.provider === 'sandbox' && pending.providerRef
 
-  // With credentials configured, a row that didn't go through the provider must
-  // not be completable — otherwise a request begun while they were absent
-  // becomes a simulated pass on a live system.
-  if (!live && sandboxConfigured()) {
+  // While running live, a row that didn't go through the provider must not be
+  // completable — otherwise a request begun while credentials were absent (or
+  // while SIMULATE_AADHAAR was on) becomes a simulated pass on a live system.
+  if (!live && liveAadhaar()) {
     throw new ApiError('provider_mismatch', 'That verification is stale. Start again.', 409)
   }
 

@@ -4,7 +4,7 @@ import { succeeded } from '../lib/haptics'
 import { SuccessCard } from '../components/cards'
 import Confetti from '../components/Confetti'
 
-export default function SuccessScreen({ onDone, checkin, session, direction }) {
+export default function SuccessScreen({ next, checkin, session, direction }) {
   // The arrival is confirmed in the hand as well as on the screen.
   useEffect(succeeded, [])
 
@@ -17,8 +17,11 @@ export default function SuccessScreen({ onDone, checkin, session, direction }) {
       />
 
       <div className="pt-6">
-        <PrimaryButton onClick={onDone} tone="brand">
-          Done
+        {/* Onward to what the hotel offers, rather than straight out of the
+            app — the guest is checked in, and this is the first moment they
+            can be told anything useful about the place. */}
+        <PrimaryButton onClick={next} tone="brand">
+          Continue
         </PrimaryButton>
       </div>
     </Screen>

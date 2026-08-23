@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { db } from '../db/client.js'
 import { identityVerifications } from '../db/schema/index.js'
 import { ApiError } from '../lib/errors.js'
-import { sandboxConfigured } from '../lib/sandbox.js'
+import { liveAadhaar } from '../lib/sandbox.js'
 import { body } from '../lib/validate.js'
 import { logEvent } from '../services/audit.js'
 import { requireOpen } from '../services/sessions.js'
@@ -109,12 +109,13 @@ identity.post('/document', body(request), async (c) => {
 /**
  * The stub gate, kept for local work only.
  *
- * It passes for anyone holding the QR, so with a KUA configured it is refused
+ * It passes for anyone holding the QR, so while running live it is refused
  * outright rather than left as a way around a check that costs money and that
- * enrolment now depends on.
+ * enrolment now depends on. `SIMULATE_AADHAAR` opens it again deliberately,
+ * and production refuses to boot with that on.
  */
 identity.post('/verifications', body(request), async (c) => {
-  if (sandboxConfigured()) {
+  if (liveAadhaar()) {
     throw new ApiError(
       'verification_required',
       'Complete the Aadhaar check to continue.',

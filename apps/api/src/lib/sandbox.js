@@ -1,4 +1,4 @@
-import { config } from '../config.js'
+import { config, simulateAadhaar } from '../config.js'
 import { ApiError } from './errors.js'
 
 /**
@@ -30,6 +30,17 @@ let cached = null // { token, expiresAt }
 /** True when credentials are configured; the caller decides what absence means. */
 export const sandboxConfigured = () =>
   Boolean(config.SANDBOX_API_KEY && config.SANDBOX_API_SECRET)
+
+/**
+ * Whether a real UIDAI call should be made at all.
+ *
+ * Two ways to end up simulating: no credentials, or the SIMULATE_AADHAAR
+ * switch in src/devFlags.js with credentials present — for working offline, or
+ * against a provider that is down, without editing them out. Every caller that
+ * used to ask `sandboxConfigured()` asks this instead, so the request and the
+ * verification can never disagree about which world they are in.
+ */
+export const liveAadhaar = () => sandboxConfigured() && !simulateAadhaar()
 
 async function accessToken() {
   if (cached && cached.expiresAt > Date.now()) return cached.token

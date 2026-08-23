@@ -225,8 +225,21 @@ export default function IdentityVerificationScreen({
           >
             <ScreenTitle
               title="Enter the code"
-              subtitle={`Sent to ${request?.sentTo ?? 'your registered mobile'} for ${request?.maskedAadhaar}.`}
+              subtitle={
+                request?.simulated
+                  ? `No code was sent for ${request?.maskedAadhaar} — identity checks are simulated on this server.`
+                  : `Sent to ${request?.sentTo ?? 'your registered mobile'} for ${request?.maskedAadhaar}.`
+              }
             />
+
+            {/* The server already says so in its own response; saying it here
+                too is what stops someone waiting for an SMS that is never
+                coming. Never shown on a live server. */}
+            {request?.simulated && (
+              <p className="mb-3 rounded-2xl bg-amber-50 px-4 py-3 text-[12.5px] leading-relaxed text-amber-700 border border-amber-100">
+                Simulated — any six digits will pass, and nothing reaches UIDAI.
+              </p>
+            )}
 
             <input
               ref={otpRef}

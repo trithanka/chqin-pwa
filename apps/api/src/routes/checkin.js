@@ -5,6 +5,7 @@ import { body } from '../lib/validate.js'
 import { logEvent } from '../services/audit.js'
 import { checkIn, findByIdempotencyKey } from '../services/checkins.js'
 import { loadAny, loadOpen } from '../services/sessions.js'
+import { stayFrom } from '../services/stay.js'
 
 export const checkin = new Hono()
 
@@ -27,6 +28,9 @@ checkin.post('/', body(checkinRequest), async (c) => {
       venueName: session.venueName,
       roomNumber: existing.roomNumber ?? session.roomNumber,
       checkedInAt: existing.checkedInAt.toISOString(),
+      // A retry has to answer with everything the first attempt would have,
+      // or the guest whose response was dropped lands on an empty stay screen.
+      stay: stayFrom(session.venueSettings),
     })
   }
 

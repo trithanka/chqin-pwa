@@ -2,6 +2,7 @@ import { and, desc, eq, isNull, sql } from 'drizzle-orm'
 import { db, transaction } from '../db/client.js'
 import { bookings, checkinSessions, checkins, credentials, rooms } from '../db/schema/index.js'
 import { unauthorized } from '../lib/errors.js'
+import { stayFrom } from './stay.js'
 
 /**
  * The check-in itself. Everything before this exists to establish who the
@@ -85,6 +86,10 @@ export async function checkIn(session, idempotencyKey) {
     venueName: session.venueName,
     roomNumber: session.roomNumber,
     checkedInAt: result.checkedInAt.toISOString(),
+    // What the hotel offers. Sent with the check-in rather than fetched after
+    // it: the screen that shows it is the next thing the guest sees, and a
+    // second round trip in a lobby is a spinner nobody needed.
+    stay: stayFrom(session.venueSettings),
   }
 }
 

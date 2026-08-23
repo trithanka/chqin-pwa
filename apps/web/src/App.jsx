@@ -15,6 +15,7 @@ import DeviceVerificationScreen from './screens/DeviceVerificationScreen'
 import IdentityVerificationScreen from './screens/IdentityVerificationScreen'
 import SecureDeviceScreen from './screens/SecureDeviceScreen'
 import SuccessScreen from './screens/SuccessScreen'
+import StayScreen from './screens/StayScreen'
 import OpeningScreen from './screens/OpeningScreen'
 import { forgetDevice } from './device'
 import { DARK_SCREEN, LIGHT_SCREEN, setStatusBar } from './lib/statusBar'
@@ -39,19 +40,31 @@ import {
 const welcome = { key: 'hotelWelcome', label: 'Welcome', Screen: HotelWelcomeScreen, bare: true }
 const done = { key: 'done', label: 'Done', Screen: SuccessScreen, final: true, fullBleed: true }
 
+// Where every flow rests: what the hotel provides, from its own onboarding
+// answers. The confirmation is a moment; this is the screen a guest comes back
+// to for the wifi password at midnight.
+const stay = { key: 'stay', label: 'Your stay', Screen: StayScreen, final: true, fullBleed: true }
+
 const FLOWS = {
-  returning: [welcome, { key: 'deviceVerify', label: 'Verify', Screen: DeviceVerificationScreen }, done],
+  returning: [
+    welcome,
+    { key: 'deviceVerify', label: 'Verify', Screen: DeviceVerificationScreen },
+    done,
+    stay,
+  ],
   firstTime: [
     welcome,
     { key: 'identity', label: 'Identity', Screen: IdentityVerificationScreen },
     { key: 'secureDevice', label: 'Secure', Screen: SecureDeviceScreen },
     done,
+    stay,
   ],
   newDevice: [
     welcome,
     { key: 'identity', label: 'Confirm', Screen: IdentityVerificationScreen },
     { key: 'secureDevice', label: 'Secure', Screen: SecureDeviceScreen },
     done,
+    stay,
   ],
 }
 
@@ -62,6 +75,7 @@ const HELP = {
   identity: 'Lay your government ID flat in good light inside the frame. This is a one-time step.',
   secureDevice: 'Creates a passkey for this device, protected by your phone’s own unlock. The private key never leaves your phone.',
   done: 'Check-in is complete. Enjoy your stay.',
+  stay: 'What this property offers, and the details guests usually ring the desk for. Tapping a service opens WhatsApp to the team that handles it.',
 }
 
 export default function App() {

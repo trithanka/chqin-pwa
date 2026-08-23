@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { z } from 'zod'
+import { SIMULATE_AADHAAR } from './devFlags.js'
 
 // Load .env before anything reads process.env. Every entry point — the server,
 // the migration scripts, drizzle.config.js — comes through this module, so this
@@ -72,6 +73,19 @@ const schema = z.object({
    */
   CONTACT_URL: z.string().default('https://chqin.in'),
 
+  /**
+   * Forces the Aadhaar simulation even when Sandbox credentials are present.
+   *
+   * The same switch as `SIMULATE_AADHAAR` in devFlags.js — either one turns it
+   * on. Flipping the constant is the usual way; this exists for a machine
+   * where you would rather not touch the code. Production refuses to start
+   * with either on; see the guard at the bottom of this file.
+   */
+  SIMULATE_AADHAAR: z
+    .string()
+    .default('false')
+    .transform((v) => ['1', 'true', 'yes', 'on'].includes(v.trim().toLowerCase())),
+
   SANDBOX_API_KEY: z.string().optional(),
   SANDBOX_API_SECRET: z.string().optional(),
   SANDBOX_BASE_URL: z.string().default('https://api.sandbox.co.in'),
@@ -116,6 +130,16 @@ const CA_PATH = new URL('../certs/supabase-ca.crt', import.meta.url)
 const ca =
   process.env.PG_CA_CERT ?? (existsSync(CA_PATH) ? readFileSync(CA_PATH, 'utf8') : undefined)
 
+/**
+ * Whether the Aadhaar simulation is on, from either switch: the constant in
+ * devFlags.js, or SIMULATE_AADHAAR in .env.
+ */
+export const simulateAadhaar = () => SIMULATE_AADHAAR || config.SIMULATE_AADHAAR
+
+/** Which of the two turned it on, for the boot line. */
+export const simulateAadhaarSource = () =>
+  SIMULATE_AADHAAR ? 'src/devFlags.js' : config.SIMULATE_AADHAAR ? '.env' : null
+
 export const sslFor = (url) =>
   isRemote(url) ? { rejectUnauthorized: true, ...(ca ? { ca } : {}) } : false
 
@@ -129,5 +153,17 @@ if (
   !(config.SANDBOX_API_KEY && config.SANDBOX_API_SECRET)
 ) {
   console.error('SANDBOX_API_KEY/SANDBOX_API_SECRET are missing, so identity checks would be simulated. Refusing to start.')
+  process.exit(1)
+}
+
+// Credentials present and simulation forced is the more dangerous shape of the
+// same mistake: it looks configured, and every guest passes. A flag left on in
+// devFlags.js is exactly how that ships, so the guard covers both sources.
+if (process.env.NODE_ENV === 'production' && simulateAadhaar()) {
+  console.error(
+    SIMULATE_AADHAAR
+      ? 'SIMULATE_AADHAAR is true in src/devFlags.js, so every identity check would pass without UIDAI. Refusing to start.'
+      : 'SIMULATE_AADHAAR is on in .env, so every identity check would pass without UIDAI. Refusing to start.',
+  )
   process.exit(1)
 }

@@ -18,7 +18,7 @@ import {
 import { lookupHash } from '../lib/crypto.js'
 import { uuidv7 } from '../lib/ids.js'
 import { ApiError, forbidden, unauthorized } from '../lib/errors.js'
-import { sandboxConfigured } from '../lib/sandbox.js'
+import { liveAadhaar } from '../lib/sandbox.js'
 import { attachBooking, bindGuest } from './sessions.js'
 import { verifiedSubject } from './identity.js'
 
@@ -82,12 +82,16 @@ async function resolveUserHandle(tx, session) {
 
 export async function startRegistration(session) {
   // A device may only enrol behind an identity check passed in this session —
-  // and once a KUA is configured, only behind one UIDAI actually answered. The
+  // and while running live, only behind one UIDAI actually answered. The
   // simulated paths mint a `passed` row for anyone holding the QR, so accepting
   // any of them would leave the Aadhaar check decorative on a live system.
+  //
+  // `SIMULATE_AADHAAR` deliberately puts the whole system in the simulated
+  // world, so there the simulated row is the one to accept — the request, the
+  // verification and this gate all read the same switch.
   const passed = await db.query.identityVerifications.findFirst({
     where: (v, { and: a, eq: e }) =>
-      sandboxConfigured()
+      liveAadhaar()
         ? a(e(v.sessionId, session.id), e(v.result, 'passed'), e(v.provider, 'sandbox'))
         : a(e(v.sessionId, session.id), e(v.result, 'passed')),
   })

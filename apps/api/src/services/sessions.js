@@ -24,6 +24,9 @@ export async function loadAny(sessionId) {
       venueName: venues.name,
       venueKind: venues.kind,
       venueLocation: venues.location,
+      // What the property offers, collected at onboarding. Only reaches a
+      // guest who has finished checking in — see services/checkins.js.
+      venueSettings: venues.settings,
       bookingRef: bookings.bookingRef,
       bookingGuestName: bookings.guestName,
       bookingGuestId: bookings.guestId,
