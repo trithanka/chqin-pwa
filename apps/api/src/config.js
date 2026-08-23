@@ -157,13 +157,21 @@ if (
 }
 
 // Credentials present and simulation forced is the more dangerous shape of the
-// same mistake: it looks configured, and every guest passes. A flag left on in
-// devFlags.js is exactly how that ships, so the guard covers both sources.
+// same mistake: it looks configured, and every guest passes.
+//
+// This used to refuse to start. It doesn't any more, deliberately: the hosted
+// deploy is a demo that must not bill UIDAI transactions, and the switch that
+// turns UIDAI off has to be the committed one in devFlags.js. So production can
+// run simulated — and says so on every boot, as loudly as a log line can.
+//
+// Before real guests check in here: set SIMULATE_AADHAAR back to false in
+// src/devFlags.js. Nothing else enforces it.
 if (process.env.NODE_ENV === 'production' && simulateAadhaar()) {
-  console.error(
-    SIMULATE_AADHAAR
-      ? 'SIMULATE_AADHAAR is true in src/devFlags.js, so every identity check would pass without UIDAI. Refusing to start.'
-      : 'SIMULATE_AADHAAR is on in .env, so every identity check would pass without UIDAI. Refusing to start.',
+  console.warn(
+    `\n${'!'.repeat(72)}\n` +
+      `  SIMULATED AADHAAR IN PRODUCTION (${simulateAadhaarSource()})\n` +
+      '  No UIDAI call is made. Any six-digit code passes. Every identity\n' +
+      '  record written here is unverified. Demo only.\n' +
+      `${'!'.repeat(72)}\n`,
   )
-  process.exit(1)
 }
