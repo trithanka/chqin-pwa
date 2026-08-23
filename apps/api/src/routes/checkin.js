@@ -10,7 +10,7 @@ import { stayFrom } from '../services/stay.js'
 export const checkin = new Hono()
 
 checkin.post('/', body(checkinRequest), async (c) => {
-  const { sessionId, idempotencyKey } = c.get('body')
+  const { sessionId, idempotencyKey, stay } = c.get('body')
 
   const open = await loadOpen(sessionId)
   const session = open ?? (await loadAny(sessionId))
@@ -34,7 +34,7 @@ checkin.post('/', body(checkinRequest), async (c) => {
     })
   }
 
-  const result = await checkIn(session, idempotencyKey)
+  const result = await checkIn(session, idempotencyKey, stay)
 
   await logEvent(c, {
     guestId: session.guestId,

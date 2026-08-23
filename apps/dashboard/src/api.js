@@ -7,7 +7,11 @@
  * while login looks fine.
  */
 
-const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8787'
+// Dev default follows the host the app was opened on: localhost when it is
+// localhost, the LAN IP when a phone scanned the card — 'localhost' from a
+// phone points at the phone.
+const BASE =
+  import.meta.env.VITE_API_URL ?? `http://${location.hostname}:8787`
 
 /**
  * VITE_API_URL is baked in at build time. Deploying without it leaves the
@@ -57,4 +61,5 @@ async function request(path, options = {}) {
 export const api = {
   get: (path) => request(path),
   post: (path, body) => request(path, { method: 'POST', body: JSON.stringify(body) }),
+  del: (path) => request(path, { method: 'DELETE' }),
 }

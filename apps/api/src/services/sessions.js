@@ -1,7 +1,7 @@
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { config } from '../config.js'
 import { db } from '../db/client.js'
-import { bookings, checkinSessions, venues, rooms } from '../db/schema/index.js'
+import { bookingRooms, bookings, checkinSessions, venues, rooms } from '../db/schema/index.js'
 import { newSessionToken, tokenHash } from '../lib/crypto.js'
 import { conflict, notFound } from '../lib/errors.js'
 
@@ -37,7 +37,10 @@ export async function loadAny(sessionId) {
     .from(checkinSessions)
     .innerJoin(venues, eq(venues.id, checkinSessions.venueId))
     .leftJoin(bookings, eq(bookings.id, checkinSessions.bookingId))
-    .leftJoin(rooms, eq(rooms.id, bookings.roomId))
+    // Through the join table: a booking can hold more than one room, and the
+    // guest looking at their own session wants the one they were given.
+    .leftJoin(bookingRooms, eq(bookingRooms.bookingId, bookings.id))
+    .leftJoin(rooms, eq(rooms.id, bookingRooms.roomId))
     .where(eq(checkinSessions.id, sessionId))
     .limit(1)
 
@@ -138,7 +141,8 @@ export async function attachBookingByLookup(session, lookup) {
       departureDate: bookings.departureDate,
     })
     .from(bookings)
-    .leftJoin(rooms, eq(rooms.id, bookings.roomId))
+    .leftJoin(bookingRooms, eq(bookingRooms.bookingId, bookings.id))
+    .leftJoin(rooms, eq(rooms.id, bookingRooms.roomId))
     .where(
       and(
         eq(bookings.venueId, session.venueId),

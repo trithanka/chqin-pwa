@@ -6,7 +6,11 @@
  * between scans except the credential-ID hint on the device.
  */
 
-const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8787'
+// Dev default follows the host the app was opened on: localhost when it is
+// localhost, the LAN IP when a phone scanned the card — 'localhost' from a
+// phone points at the phone.
+const BASE =
+  import.meta.env.VITE_API_URL ?? `http://${location.hostname}:8787`
 
 export class ApiError extends Error {
   constructor(code, message, status) {
@@ -48,7 +52,8 @@ export const api = {
   registrationVerify: (payload) => request('/webauthn/registration/verify', payload),
   authenticationOptions: (sessionId) => request('/webauthn/authentication/options', { sessionId }),
   authenticationVerify: (payload) => request('/webauthn/authentication/verify', payload),
-  checkin: (sessionId, idempotencyKey) => request('/checkin', { sessionId, idempotencyKey }),
+  checkin: (sessionId, idempotencyKey, stay) =>
+    request('/checkin', { sessionId, idempotencyKey, ...(stay ? { stay } : {}) }),
 }
 
 export const apiConfigured = Boolean(import.meta.env.VITE_API_URL)

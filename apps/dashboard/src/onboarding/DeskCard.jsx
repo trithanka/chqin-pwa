@@ -7,7 +7,14 @@ import Logo from '../components/Logo'
 // Where the guest app lives, not where the dashboard does — the printed card
 // sends a guest to check in. Hardcoding it means a card printed from staging
 // points at production, or the reverse.
-const guestApp = import.meta.env.VITE_GUEST_APP_URL ?? window.location.origin
+// In dev the dashboard is on :5174 and the guest app on :5173, so the card's
+// own origin is the wrong one. Use the host the dashboard was opened on — a
+// LAN IP when staff opened it that way, so a scanning phone can reach it.
+const guestApp =
+  import.meta.env.VITE_GUEST_APP_URL ??
+  (import.meta.env.DEV
+    ? `${window.location.protocol}//${window.location.hostname}:5173`
+    : window.location.origin)
 
 /**
  * The desk card. One code per property, printed once and left on the counter —

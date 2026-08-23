@@ -1,6 +1,7 @@
 import { and, count, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
 import { db, transaction } from '../db/client.js'
 import {
+  bookingRooms,
   bookings,
   checkinSessions,
   checkins,
@@ -159,35 +160,52 @@ export async function profile({ staffId, venueId }) {
 /* ------------------------------------------------------------------ */
 
 const bookingRow = {
+  // What this row *is*. A walk-in row is shaped identically but its id keys a
+  // different table, and a client that can't tell them apart sends check-in
+  // ids to /bookings/:id — which 404s, and looks like missing data.
+  kind: sql`'booking'`,
   id: bookings.id,
   reference: bookings.bookingRef,
   guestId: bookings.guestId,
   guestName: bookings.guestName,
-  room: rooms.number,
-  roomType: rooms.roomType,
+  // Every room the booking holds, as one string — "003" or "003, 004". A row
+  // per room would repeat the booking once per room in every list.
+  room: sql`string_agg(${rooms.number}, ', ' ORDER BY ${rooms.number})`,
+  roomIds: sql`coalesce(array_agg(${bookingRooms.roomId}) FILTER (WHERE ${bookingRooms.roomId} IS NOT NULL), '{}')`,
+  roomType: sql`min(${rooms.roomType})`,
   arrival: bookings.arrivalDate,
   departure: bookings.departureDate,
   status: bookings.status,
   source: bookings.pmsRef,
+  partySize: bookings.partySize,
+  roomsCount: bookings.roomsCount,
   checkedInAt: checkins.checkedInAt,
   journey: checkins.journey,
+  // The check-in behind the reservation, when there is one. Room changes are
+  // addressed by check-in, so a row without this can't be moved from Today.
+  checkinId: checkins.id,
 }
 
-const bookingsQuery = (venueId) =>
+/**
+ * Callers pass their extra condition in rather than chaining a second
+ * `.where()`: the rooms are aggregated, so the query ends in a GROUP BY and a
+ * later `.where()` would land on the wrong side of it.
+ */
+const bookingsQuery = (venueId, extra) =>
   db
     .select(bookingRow)
     .from(bookings)
-    .leftJoin(rooms, eq(rooms.id, bookings.roomId))
+    .leftJoin(bookingRooms, eq(bookingRooms.bookingId, bookings.id))
+    .leftJoin(rooms, eq(rooms.id, bookingRooms.roomId))
     .leftJoin(checkins, eq(checkins.bookingId, bookings.id))
-    .where(eq(bookings.venueId, venueId))
+    .where(extra ? and(eq(bookings.venueId, venueId), extra) : eq(bookings.venueId, venueId))
+    .groupBy(bookings.id, checkins.id)
 
 export const listBookings = (venueId) =>
   bookingsQuery(venueId).orderBy(desc(bookings.arrivalDate), bookings.bookingRef)
 
 export async function getBooking(venueId, id) {
-  const [row] = await bookingsQuery(venueId).where(
-    and(eq(bookings.venueId, venueId), eq(bookings.id, id)),
-  )
+  const [row] = await bookingsQuery(venueId, eq(bookings.id, id))
   if (!row) throw notFound('No such booking here.')
   return row
 }
@@ -238,16 +256,20 @@ export async function checkinCode(venueId) {
 export async function overview(venueId) {
   const today = new Date().toISOString().slice(0, 10)
 
-  const expected = await bookingsQuery(venueId).where(
-    and(eq(bookings.venueId, venueId), eq(bookings.arrivalDate, today)),
-  )
+  const expected = await bookingsQuery(venueId, eq(bookings.arrivalDate, today))
 
   const walkIns = await db
     .select({
+      kind: sql`'walkin'`,
       id: checkins.id,
       reference: sql`null`,
       guestId: checkins.guestId,
       guestName: guests.displayName,
+      checkinId: checkins.id,
+      partySize: checkins.partySize,
+      roomsCount: checkins.roomsCount,
+      roomId: checkins.roomId,
+      roomIds: sql`case when ${checkins.roomId} is null then '{}'::uuid[] else array[${checkins.roomId}] end`,
       room: rooms.number,
       roomType: sql`null`,
       arrival: sql`${today}`,
@@ -424,4 +446,241 @@ export async function saveSettings(venueId, patch) {
 
   const { business: _business, ...editable } = settings
   return editable
+}
+
+/* ------------------------------------------------------------------ */
+/* Rooms — assigning one to a walk-in                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The venue's rooms, and which are spoken for right now.
+ *
+ * "Occupied" means some current stay already points at it. A room the desk
+ * assigns today and never clears would otherwise look free tomorrow, so the
+ * window matches the one Today's in-house count uses: since yesterday.
+ */
+export async function listRooms(venueId) {
+  const rows = await db
+    .select({
+      id: rooms.id,
+      number: rooms.number,
+      roomType: rooms.roomType,
+      takenBy: checkins.id,
+    })
+    .from(rooms)
+    .leftJoin(
+      checkins,
+      and(eq(checkins.roomId, rooms.id), sql`${checkins.checkedInAt}::date >= CURRENT_DATE - 1`),
+    )
+    .where(eq(rooms.venueId, venueId))
+    .orderBy(rooms.number)
+
+  return rows
+}
+
+/**
+ * Put a walk-in in a room, or take them out of one.
+ *
+ * A walk-in arrives with no reservation, so nothing has decided a room for
+ * them — until now that meant the column stayed null forever and the desk had
+ * no way to say where the guest actually is.
+ *
+ * Both ids are checked against the venue in the same statement rather than
+ * read first and trusted: an id from a client is a guess about someone else's
+ * property until the `where` says otherwise.
+ */
+/**
+ * Which rooms a stay holds, set by the desk.
+ *
+ * Takes the whole list rather than one room, because "give them 003 and 004"
+ * is one decision and two calls would leave a moment where the guest has half
+ * their rooms. An empty list means the desk has taken the rooms back.
+ *
+ * The booking is written here, on the first assignment: a walk-in exists only
+ * as a check-in until the desk agrees to something, and this is that moment.
+ * What the guest said on the way in — nights, how many people, how many rooms
+ * — is what it is created from, so their answers become the reservation rather
+ * than a note nobody reads.
+ */
+export async function assignRoom(venueId, checkinId, roomIds) {
+  const wanted = [...new Set(roomIds ?? [])]
+
+  return transaction(async (tx) => {
+    const found = wanted.length
+      ? await tx
+          .select({ id: rooms.id, number: rooms.number })
+          .from(rooms)
+          .where(and(inArray(rooms.id, wanted), eq(rooms.venueId, venueId)))
+      : []
+
+    if (found.length !== wanted.length) throw notFound('No such room here.')
+
+    const [stay] = await tx
+      .select({
+        id: checkins.id,
+        bookingId: checkins.bookingId,
+        guestId: checkins.guestId,
+        guestName: guests.displayName,
+        checkedInAt: checkins.checkedInAt,
+        nights: checkins.nights,
+        partySize: checkins.partySize,
+        roomsCount: checkins.roomsCount,
+      })
+      .from(checkins)
+      .leftJoin(guests, eq(guests.id, checkins.guestId))
+      .where(and(eq(checkins.id, checkinId), eq(checkins.venueId, venueId)))
+      .limit(1)
+
+    if (!stay) throw notFound('No such check-in here.')
+
+    let bookingId = stay.bookingId
+
+    if (wanted.length && !bookingId) {
+      const arrival = (stay.checkedInAt ?? new Date()).toISOString().slice(0, 10)
+      // The guest's own answer decides the departure date. One night only when
+      // they weren't asked — every check-in taken before that screen existed.
+      const departure = new Date(`${arrival}T00:00:00Z`)
+      departure.setUTCDate(departure.getUTCDate() + Math.max(stay.nights ?? 1, 1))
+
+      const [booking] = await tx
+        .insert(bookings)
+        .values({
+          venueId,
+          // Not a PMS reference and shouldn't look like one: WI marks a stay
+          // this system created, and the check-in's own id keeps it unique
+          // per venue without a counter to race on.
+          bookingRef: `WI-${stay.id.slice(-6).toUpperCase()}`,
+          guestName: stay.guestName ?? 'Walk-in guest',
+          guestId: stay.guestId,
+          arrivalDate: arrival,
+          departureDate: departure.toISOString().slice(0, 10),
+          partySize: stay.partySize,
+          roomsCount: stay.roomsCount,
+          status: 'checked_in',
+        })
+        .returning({ id: bookings.id })
+
+      bookingId = booking.id
+    }
+
+    if (bookingId) {
+      // Replaced wholesale: the list the desk sent is the answer, and working
+      // out which rows to add and which to remove is the same two statements.
+      await tx.delete(bookingRooms).where(eq(bookingRooms.bookingId, bookingId))
+      if (wanted.length) {
+        await tx.insert(bookingRooms).values(wanted.map((roomId) => ({ bookingId, roomId })))
+      }
+    }
+
+    await tx
+      .update(checkins)
+      // checkins.roomId is where *this guest* sleeps; a party with two rooms
+      // still has one first room, and the guest's own stay screen shows it.
+      .set({ roomId: wanted[0] ?? null, bookingId })
+      .where(eq(checkins.id, checkinId))
+
+    return {
+      id: checkinId,
+      roomIds: wanted,
+      rooms: found.map((r) => r.number).sort(),
+      bookingId,
+    }
+  })
+}
+
+/* ------------------------------------------------------------------ */
+/* The property itself                                                 */
+/* ------------------------------------------------------------------ */
+
+/** What the owner can change about the property. */
+export async function getProperty(venueId) {
+  const [venue] = await db
+    .select({
+      name: venues.name,
+      kind: venues.kind,
+      location: venues.location,
+      timezone: venues.timezone,
+      address: venues.address,
+    })
+    .from(venues)
+    .where(eq(venues.id, venueId))
+    .limit(1)
+
+  if (!venue) throw notFound('That property no longer exists.')
+  return venue
+}
+
+/**
+ * `address` is merged rather than replaced, for the same reason
+ * `venues.settings` is: it is one JSON column holding fields this screen
+ * doesn't show, and a spread of what the form knows about would delete the
+ * rest without anything noticing.
+ */
+export async function saveProperty(venueId, patch) {
+  const current = await getProperty(venueId)
+
+  const [row] = await db
+    .update(venues)
+    .set({
+      name: patch.name,
+      kind: patch.kind,
+      location: patch.location ?? null,
+      timezone: patch.timezone,
+      address: { ...current.address, ...patch.address },
+    })
+    .where(eq(venues.id, venueId))
+    .returning({ name: venues.name, kind: venues.kind, location: venues.location })
+
+  return row
+}
+
+/* ------------------------------------------------------------------ */
+/* Rooms                                                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Add rooms, skipping any number the property already has.
+ *
+ * A duplicate is what happens when someone adds "101-110" twice, and the
+ * unique index would turn the whole batch into an error rather than adding the
+ * eight that were new. Skipping says what happened instead.
+ */
+export async function addRooms(venueId, list) {
+  const added = await db
+    .insert(rooms)
+    .values(list.map(({ number, type }) => ({ venueId, number, roomType: type ?? null })))
+    .onConflictDoNothing({ target: [rooms.venueId, rooms.number] })
+    .returning({ id: rooms.id, number: rooms.number })
+
+  return { added, skipped: list.length - added.length }
+}
+
+/**
+ * Remove a room, unless someone is in it.
+ *
+ * A stay points at its room, so deleting one out from under a guest would
+ * either fail on the constraint or erase where they are. Refusing with the
+ * reason is the only answer that helps the person at the desk.
+ */
+export async function removeRoom(venueId, roomId) {
+  const [room] = await db
+    .select({ id: rooms.id })
+    .from(rooms)
+    .where(and(eq(rooms.id, roomId), eq(rooms.venueId, venueId)))
+    .limit(1)
+
+  if (!room) throw notFound('No such room here.')
+
+  const [occupied] = await db
+    .select({ id: checkins.id })
+    .from(checkins)
+    .where(and(eq(checkins.roomId, roomId), sql`${checkins.checkedInAt}::date >= CURRENT_DATE - 1`))
+    .limit(1)
+
+  if (occupied) {
+    throw conflict('room_occupied', 'Someone is in that room. Move them first.')
+  }
+
+  await db.delete(rooms).where(and(eq(rooms.id, roomId), eq(rooms.venueId, venueId)))
+  return { id: roomId }
 }

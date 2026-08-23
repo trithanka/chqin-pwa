@@ -10,6 +10,12 @@ import {
   getBooking,
   getGuest,
   getSettings,
+  getProperty,
+  saveProperty,
+  listRooms,
+  addRooms,
+  removeRoom,
+  assignRoom,
   saveSettings,
   listBookings,
   listGuests,
@@ -88,6 +94,25 @@ const registerRequest = z.object({
   ...settingsShape,
 })
 
+/** The property as its owner can change it. Mirrors registration's `property`. */
+const propertyRequest = z.object({
+  name: z.string().min(1).max(160),
+  kind: z.string().max(40).default('hotel'),
+  location: z.string().max(160).nullable().default(null),
+  timezone: z.string().max(64).default('UTC'),
+  address: z.record(z.string(), z.unknown()).default({}),
+})
+
+const roomsRequest = z.object({
+  rooms: z
+    .array(z.object({ number: z.string().min(1).max(16), type: z.string().max(40).optional() }))
+    .min(1)
+    .max(500),
+})
+
+/** The whole list, every time. An empty one takes the rooms back. */
+const roomRequest = z.object({ roomIds: z.array(z.uuid()).max(20).default([]) })
+
 const loginRequest = z.object({
   email: z.email(),
   password: z.string().min(1).max(200),
@@ -103,14 +128,14 @@ staff.post('/register', body(registerRequest), async (c) => {
     c,
     COOKIE,
     issue({ staffId: result.staffId, venueId: result.venueId, role: 'owner' }),
-    cookieOptions(),
+    cookieOptions(c),
   )
   return c.json({ name: result.name, venue: { name: result.venueName } })
 })
 
 staff.post('/login', body(loginRequest), async (c) => {
   const session = await login(c.get('body'))
-  setCookie(c, COOKIE, issue(session), cookieOptions())
+  setCookie(c, COOKIE, issue(session), cookieOptions(c))
   return c.json({ name: session.name, role: session.role })
 })
 
@@ -147,6 +172,24 @@ staff.get('/bookings/:id', async (c) => c.json(await getBooking(venueOf(c), c.re
 staff.get('/guests', async (c) => c.json({ guests: await listGuests(venueOf(c)) }))
 
 staff.get('/guests/:id', async (c) => c.json(await getGuest(venueOf(c), c.req.param('id'))))
+
+staff.get('/property', async (c) => c.json(await getProperty(venueOf(c))))
+
+staff.post('/property', body(propertyRequest), async (c) =>
+  c.json(await saveProperty(venueOf(c), c.get('body'))),
+)
+
+staff.get('/rooms', async (c) => c.json({ rooms: await listRooms(venueOf(c)) }))
+
+staff.post('/rooms', body(roomsRequest), async (c) =>
+  c.json(await addRooms(venueOf(c), c.get('body').rooms)),
+)
+
+staff.delete('/rooms/:id', async (c) => c.json(await removeRoom(venueOf(c), c.req.param('id'))))
+
+staff.post('/checkins/:id/room', body(roomRequest), async (c) =>
+  c.json(await assignRoom(venueOf(c), c.req.param('id'), c.get('body').roomIds)),
+)
 
 staff.get('/settings', async (c) => c.json(await getSettings(venueOf(c))))
 

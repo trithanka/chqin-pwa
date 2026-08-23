@@ -61,6 +61,10 @@ app.use(
           ? origin
           : null,
     credentials: true,
+    // Without this the browser re-asks permission before nearly every call,
+    // and the dashboard pays two Singapore round trips for one request. Two
+    // hours is Chrome's ceiling; anything larger is silently clamped to it.
+    maxAge: 7200,
   }),
 )
 

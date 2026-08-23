@@ -3,6 +3,7 @@ import {
   check,
   date,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -83,9 +84,14 @@ export const bookings = pgTable(
     pmsRef: text('pms_ref'),
     guestName: text('guest_name').notNull(), // as booked; not an identity
     guestId: uuid('guest_id').references(() => guests.id),
-    roomId: uuid('room_id').references(() => rooms.id),
     arrivalDate: date('arrival_date').notNull(),
     departureDate: date('departure_date').notNull(),
+    // What the stay was asked for, as opposed to what has been given: a party
+    // of four wanting two rooms is a fact about the booking before the desk
+    // has decided which rooms. The rooms themselves live in booking_rooms — a
+    // booking can hold several, so they can't be a column here.
+    partySize: integer('party_size'),
+    roomsCount: integer('rooms_count'),
     status: text('status').notNull().default('confirmed'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -96,6 +102,30 @@ export const bookings = pgTable(
       .where(sql`status = 'confirmed'`),
     index('bookings_guest').on(table.guestId).where(sql`guest_id IS NOT NULL`),
     check('bookings_status', sql`${table.status} IN ('confirmed','checked_in','checked_out','cancelled')`),
+  ],
+)
+
+/**
+ * The rooms a booking actually holds.
+ *
+ * A row per room rather than a column on the booking, because a party can take
+ * two rooms and a column can only ever name one. This is the only record of
+ * which rooms are given out — `bookings.rooms_count` says how many were asked
+ * for, and the two are allowed to disagree while the desk is still working.
+ */
+export const bookingRooms = pgTable(
+  'booking_rooms',
+  {
+    bookingId: uuid('booking_id')
+      .notNull()
+      .references(() => bookings.id, { onDelete: 'cascade' }),
+    roomId: uuid('room_id')
+      .notNull()
+      .references(() => rooms.id, { onDelete: 'cascade' }),
+  },
+  (table) => [
+    uniqueIndex('booking_rooms_key').on(table.bookingId, table.roomId),
+    index('booking_rooms_room').on(table.roomId),
   ],
 )
 
@@ -150,9 +180,9 @@ export const venuesRelations = relations(venues, ({ many }) => ({
   bookings: many(bookings),
 }))
 
-export const bookingsRelations = relations(bookings, ({ one }) => ({
+export const bookingsRelations = relations(bookings, ({ many, one }) => ({
   venue: one(venues, { fields: [bookings.venueId], references: [venues.id] }),
-  room: one(rooms, { fields: [bookings.roomId], references: [rooms.id] }),
+  rooms: many(bookingRooms),
   guest: one(guests, { fields: [bookings.guestId], references: [guests.id] }),
 }))
 

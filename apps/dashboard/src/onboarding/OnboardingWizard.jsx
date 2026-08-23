@@ -320,9 +320,9 @@ function validate(stepKey, data) {
   // A service with nowhere to send its requests is a request that vanishes.
   if (stepKey === 'routing') {
     for (const service of data.services) {
-      const number = (data.contacts[service] ?? '').trim()
-      if (!number) errors[service] = 'Add a number, or use the reception one.'
-      else if (!PHONE.test(number)) errors[service] = 'Include the country code, like +91 98765 43210.'
+      const digits = (data.contacts[service] ?? '').replace(/\D/g, '')
+      if (!digits) errors[service] = 'Add a number, or use the reception one.'
+      else if (digits.length !== 10) errors[service] = 'Please enter all 10 digits.'
     }
   }
 

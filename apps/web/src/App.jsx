@@ -14,6 +14,7 @@ import HotelWelcomeScreen from './screens/HotelWelcomeScreen'
 import DeviceVerificationScreen from './screens/DeviceVerificationScreen'
 import IdentityVerificationScreen from './screens/IdentityVerificationScreen'
 import SecureDeviceScreen from './screens/SecureDeviceScreen'
+import StayDetailsScreen from './screens/StayDetailsScreen'
 import SuccessScreen from './screens/SuccessScreen'
 import StayScreen from './screens/StayScreen'
 import OpeningScreen from './screens/OpeningScreen'
@@ -40,6 +41,11 @@ import {
 const welcome = { key: 'hotelWelcome', label: 'Welcome', Screen: HotelWelcomeScreen, bare: true }
 const done = { key: 'done', label: 'Done', Screen: SuccessScreen, final: true, fullBleed: true }
 
+// Asked before identity, while the guest is still willing to tap: three
+// answers about their own stay that nothing else in the system knows for a
+// walk-in. Skipped entirely when a reservation is attached — see stepsFor().
+const stayDetails = { key: 'stayDetails', label: 'Stay', Screen: StayDetailsScreen }
+
 // Where every flow rests: what the hotel provides, from its own onboarding
 // answers. The confirmation is a moment; this is the screen a guest comes back
 // to for the wifi password at midnight.
@@ -48,12 +54,14 @@ const stay = { key: 'stay', label: 'Your stay', Screen: StayScreen, final: true,
 const FLOWS = {
   returning: [
     welcome,
+    stayDetails,
     { key: 'deviceVerify', label: 'Verify', Screen: DeviceVerificationScreen },
     done,
     stay,
   ],
   firstTime: [
     welcome,
+    stayDetails,
     { key: 'identity', label: 'Identity', Screen: IdentityVerificationScreen },
     { key: 'secureDevice', label: 'Secure', Screen: SecureDeviceScreen },
     done,
@@ -61,6 +69,7 @@ const FLOWS = {
   ],
   newDevice: [
     welcome,
+    stayDetails,
     { key: 'identity', label: 'Confirm', Screen: IdentityVerificationScreen },
     { key: 'secureDevice', label: 'Secure', Screen: SecureDeviceScreen },
     done,
@@ -74,6 +83,7 @@ const HELP = {
   findBooking: 'The code on the desk knows the hotel but not you. Your last name is usually enough — only today\'s arrivals are searched.',
   identity: 'Lay your government ID flat in good light inside the frame. This is a one-time step.',
   secureDevice: 'Creates a passkey for this device, protected by your phone’s own unlock. The private key never leaves your phone.',
+  stayDetails: "Your answers, not a booking — the desk confirms them when it hands over your room. Nothing here is charged or held.",
   done: 'Check-in is complete. Enjoy your stay.',
   stay: 'What this property offers, and the details guests usually ring the desk for. Tapping a service opens WhatsApp to the team that handles it.',
 }
@@ -115,7 +125,11 @@ export default function App() {
   // screens/FindBookingScreen.jsx is still in the tree — importing it and
   // splicing it in after the welcome step is the one change needed if matching
   // a reservation becomes required again.
-  const currentFlowSteps = FLOWS[activeMode]
+  // A guest whose reservation is attached said all this when they booked, so
+  // the stay step is dropped rather than asked twice.
+  const currentFlowSteps = session?.booking
+    ? FLOWS[activeMode].filter((s) => s.key !== 'stayDetails')
+    : FLOWS[activeMode]
 
   const step = currentFlowSteps[stepIndex]
 
@@ -196,14 +210,14 @@ export default function App() {
   /** Enrol this device, then finish. First-time and new-device end here. */
   const runEnrolment = useCallback(async () => {
     await enrolDevice(session.sessionId, session.verificationId ?? null)
-    const result = await completeCheckin(session.sessionId, session.idempotencyKey)
+    const result = await completeCheckin(session.sessionId, session.idempotencyKey, session.stay)
     setCheckin(result)
   }, [session])
 
   /** Prove an existing passkey, then finish. */
   const runAuthentication = useCallback(async () => {
     await authenticate(session.sessionId)
-    const result = await completeCheckin(session.sessionId, session.idempotencyKey)
+    const result = await completeCheckin(session.sessionId, session.idempotencyKey, session.stay)
     setCheckin(result)
   }, [session])
 
@@ -228,6 +242,7 @@ export default function App() {
 
   const screenProps = {
     next,
+    patchSession: (patch) => setSession((s) => ({ ...s, ...patch })),
     attachBooking: linkBooking,
     showToast,
     onDone: reset,

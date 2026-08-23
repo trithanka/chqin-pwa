@@ -37,7 +37,12 @@ export default function RegisterPage() {
       // service they later turned off is a request routed nowhere.
       contacts: Object.fromEntries(
         data.services
-          .map((service) => [service, (data.contacts[service] ?? '').trim()])
+          .map((service) => {
+            const raw = (data.contacts[service] ?? '').trim()
+            const digits = raw.replace(/\D/g, '')
+            const phone = digits.length === 10 ? `+91 ${digits}` : raw
+            return [service, phone]
+          })
           .filter(([, number]) => number),
       ),
     })

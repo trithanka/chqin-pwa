@@ -10,6 +10,12 @@ import { deviceLabel, runAuthentication, runRegistration } from './passkey'
  * who you are, then check in.
  */
 
+// crypto.randomUUID only exists in a secure context, and dev over a LAN IP is
+// not one. The key only has to be unique per session, never unguessable.
+const uuid = () =>
+  crypto.randomUUID?.() ??
+  `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`
+
 /** A scanned token becomes a session, and the session picks the journey. */
 export async function start(token) {
   const session = await api.resolveSession(token)
@@ -23,7 +29,7 @@ export async function start(token) {
     greetingName: detection.greetingName,
     // One key per session: a retry after a dropped response returns the
     // original check-in instead of making a second one.
-    idempotencyKey: crypto.randomUUID(),
+    idempotencyKey: uuid(),
   }
 }
 
@@ -68,8 +74,8 @@ export async function authenticate(sessionId) {
   return api.authenticationVerify({ sessionId, challengeId, credential })
 }
 
-export const completeCheckin = (sessionId, idempotencyKey) =>
-  api.checkin(sessionId, idempotencyKey)
+export const completeCheckin = (sessionId, idempotencyKey, stay) =>
+  api.checkin(sessionId, idempotencyKey, stay)
 
 /**
  * A QR scanned by the phone's own camera app opens a link rather than landing

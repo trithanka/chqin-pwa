@@ -133,10 +133,25 @@ export const authenticationVerifyRequest = z.object({
 /* Check-in                                                            */
 /* ------------------------------------------------------------------ */
 
+/**
+ * What the guest says about their own stay on the way in.
+ *
+ * A statement of intent, not the property's record: the desk sees these when
+ * it assigns rooms and the booking is written from what it confirms. Optional
+ * throughout, because a guest with a reservation was already asked all of this
+ * when they booked.
+ */
+export const stayDeclaration = z.object({
+  nights: z.number().int().min(1).max(90),
+  partySize: z.number().int().min(1).max(20),
+  roomsCount: z.number().int().min(1).max(10),
+})
+
 export const checkinRequest = z.object({
   sessionId: z.uuid(),
   /** Same key on a retry must not produce a second check-in. */
   idempotencyKey: z.string().min(8).max(64),
+  stay: stayDeclaration.optional(),
 })
 
 export const checkinResponse = z.object({

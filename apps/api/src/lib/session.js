@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
-import { config, isRemote } from '../config.js'
+import { config } from '../config.js'
 
 /**
  * Staff sessions as a signed cookie — no session table.
@@ -46,12 +46,27 @@ export function read(token) {
  * cookie — which looks exactly like a broken session: login returns 200, the
  * next request is 401. SameSite=None has the same symptom for a different
  * reason, and browsers require Secure alongside it.
+ *
+ * Which is why this reads the request's own scheme rather than inferring it.
+ * It used to ask `isRemote()`, meaning "does DATABASE_URL point somewhere
+ * hosted" — a stand-in for "are we deployed" that quietly became wrong the day
+ * local development started against a hosted database: every local login then
+ * issued a Secure cookie over http and every request after it was a 401. The
+ * database's address was never evidence about the browser's connection.
+ *
+ * Behind a proxy the socket is plain http and only `x-forwarded-proto` knows
+ * the truth, so that is trusted when present — Render and Vercel both set it,
+ * and neither passes a client-supplied one through.
  */
-export const cookieOptions = () => ({
-  httpOnly: true,
-  sameSite: config.COOKIE_SAMESITE,
-  secure:
-    config.COOKIE_SAMESITE === 'None' || isRemote() || process.env.NODE_ENV === 'production',
-  path: '/',
-  maxAge: MAX_AGE_SECONDS,
-})
+export const cookieOptions = (c) => {
+  const forwarded = c?.req?.header('x-forwarded-proto')?.split(',')[0]?.trim()
+  const scheme = forwarded ?? (c ? new URL(c.req.url).protocol.replace(':', '') : 'https')
+
+  return {
+    httpOnly: true,
+    sameSite: config.COOKIE_SAMESITE,
+    secure: config.COOKIE_SAMESITE === 'None' || scheme === 'https',
+    path: '/',
+    maxAge: MAX_AGE_SECONDS,
+  }
+}

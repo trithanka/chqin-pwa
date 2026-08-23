@@ -28,7 +28,7 @@ export async function findByIdempotencyKey(key) {
   return row ?? null
 }
 
-export async function checkIn(session, idempotencyKey) {
+export async function checkIn(session, idempotencyKey, stay) {
   if (!session.guestId) {
     throw unauthorized('not_authenticated', 'Verify with your passkey first.')
   }
@@ -55,6 +55,11 @@ export async function checkIn(session, idempotencyKey) {
         sessionId: session.id,
         credentialId: credential?.id ?? null,
         journey,
+        // What the guest said. Null for a guest who was never asked — anyone
+        // arriving on a reservation, which already carries these answers.
+        nights: stay?.nights ?? null,
+        partySize: stay?.partySize ?? null,
+        roomsCount: stay?.roomsCount ?? null,
         idempotencyKey,
       })
       .onConflictDoUpdate({

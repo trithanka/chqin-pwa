@@ -1,5 +1,14 @@
 import { sql } from 'drizzle-orm'
-import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import {
+  check,
+  index,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core'
 import { credentials, guests } from './identity.js'
 import { bookings, checkinSessions, rooms, venues } from './property.js'
 import { uuidv7 } from '../../lib/ids.js'
@@ -27,6 +36,12 @@ export const checkins = pgTable(
     }),
     journey: text('journey').notNull(), // returning | newDevice | firstTime | desk
     roomId: uuid('room_id').references(() => rooms.id),
+    // What the guest said about their own stay on the way in. A statement of
+    // intent, not the property's record: the desk confirms it when it assigns
+    // rooms, and the booking is written from the confirmed numbers.
+    nights: integer('nights'),
+    partySize: integer('party_size'),
+    roomsCount: integer('rooms_count'),
     idempotencyKey: text('idempotency_key'),
     checkedInAt: timestamp('checked_in_at', { withTimezone: true }).notNull().defaultNow(),
   },
