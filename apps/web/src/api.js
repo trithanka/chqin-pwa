@@ -6,11 +6,10 @@
  * between scans except the credential-ID hint on the device.
  */
 
-// Dev default follows the host the app was opened on: localhost when it is
-// localhost, the LAN IP when a phone scanned the card — 'localhost' from a
-// phone points at the phone.
-const BASE =
-  import.meta.env.VITE_API_URL ?? `http://${location.hostname}:8787`
+// Same-origin by default: the dev server proxies /api to the API process, so
+// a phone (or a tunnel) reaches it wherever the page itself came from.
+// 'localhost' from a phone points at the phone.
+const BASE = import.meta.env.VITE_API_URL ?? '/api'
 
 export class ApiError extends Error {
   constructor(code, message, status) {

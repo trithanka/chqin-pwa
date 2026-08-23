@@ -38,6 +38,9 @@ export default function DeviceVerificationScreen({
       setTimeout(next, 600)
     } catch (err) {
       setState('idle')
+      // The guest gets a kind sentence; whoever is holding the phone next to a
+      // console gets the reason the server actually gave.
+      console.warn('[chqin] passkey verification failed', err.code, err.message)
 
       if (isCancellation(err)) {
         setNote('Unlock was dismissed. Tap to try again.')

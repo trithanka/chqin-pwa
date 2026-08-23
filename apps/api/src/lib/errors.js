@@ -22,6 +22,10 @@ export const forbidden = (code, message) => new ApiError(code, message, 403)
 /** Hono error handler: known failures pass through, unknown ones don't leak. */
 export const handleError = (err, c) => {
   if (err instanceof ApiError) {
+    // Logged, not just returned: a rejected ceremony is the one failure whose
+    // cause lives only in the message, and the guest is shown a kind sentence
+    // instead of it. Without this line production has no record of why.
+    console.warn(`[${err.code}] ${c.req.method} ${c.req.path} — ${err.message}`)
     return c.json({ error: err.code, message: err.message }, err.status)
   }
   console.error(err)

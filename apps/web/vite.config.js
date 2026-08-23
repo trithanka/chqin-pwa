@@ -7,7 +7,24 @@ import { VitePWA } from 'vite-plugin-pwa'
 export default defineConfig({
   // strictPort: fail loudly rather than drifting onto 5174, which belongs to
   // the dashboard. A silently reassigned port is a confusing half-hour.
-  server: { host: true, port: 5173, strictPort: true },
+  // One origin for app and API: `/api/*` is proxied to the API process, so a
+  // single HTTPS tunnel covers both. Passkeys need a secure context and an RP
+  // ID equal to the page's host — plain http://<lan-ip> can never provide
+  // either, so testing them on a real phone means tunnelling.
+  server: {
+    host: true,
+    port: 5173,
+    strictPort: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8787',
+        changeOrigin: false,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+    },
+    // Cloudflare/ngrok hostnames are not known in advance.
+    allowedHosts: true,
+  },
   plugins: [
     react(),
     tailwindcss(),
