@@ -79,6 +79,13 @@ async function accessToken() {
  * and tries again rather than surfacing as a failed check in a lobby.
  */
 async function call(path, body, { retryOnAuth = true } = {}) {
+  // Nothing reaches Sandbox while simulating. Every caller already checks
+  // liveAadhaar(); this is the backstop for the one that forgets, so a
+  // developer with the switch on can never be billed a real transaction.
+  if (simulateAadhaar()) {
+    throw new Error(`sandbox: refusing ${path} — SIMULATE_AADHAAR is on`)
+  }
+
   const token = await accessToken()
 
   const res = await fetch(`${config.SANDBOX_BASE_URL}${path}`, {
