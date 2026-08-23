@@ -42,7 +42,9 @@ export default function DeskCard({ propertyName, token, onLight = false }) {
     QRCode.toDataURL(url, {
       width: 640,
       margin: 1,
-      errorCorrectionLevel: 'M',
+      // 'H' recovers ~30% of the code, which is what pays for the logo sitting
+      // over the middle. At 'M' the mark would eat data the scanner needs.
+      errorCorrectionLevel: 'H',
       color: { dark: '#0f172a', light: '#ffffff' },
     }).then((dataUrl) => {
       if (!cancelled) setPng(dataUrl)
@@ -80,11 +82,24 @@ export default function DeskCard({ propertyName, token, onLight = false }) {
 
         <div className="relative my-6 rounded-2xl border border-slate-200 p-3">
           {png ? (
-            <img
-              src={png}
-              alt={`Check-in QR code for ${propertyName}`}
-              className={`size-40 ${preview ? 'opacity-20 blur-[1px]' : ''}`}
-            />
+            <>
+              <img
+                src={png}
+                alt={`Check-in QR code for ${propertyName}`}
+                className={`size-40 ${preview ? 'opacity-20 blur-[1px]' : ''}`}
+              />
+              {/* The mark sits in the code rather than under it: a printed card
+                  is read at arm's length, and a line of small type under a QR
+                  is the first thing a camera crops out. Kept under a fifth of
+                  the code's width so error correction can still recover it. */}
+              {!preview && (
+                <span className="pointer-events-none absolute inset-0 grid place-items-center">
+                  <span className="grid size-9 place-items-center rounded-lg bg-white">
+                    <Logo className="h-3.5 w-auto text-slate-900" />
+                  </span>
+                </span>
+              )}
+            </>
           ) : (
             <div className="size-40 animate-pulse rounded-lg bg-slate-100" />
           )}
@@ -95,10 +110,6 @@ export default function DeskCard({ propertyName, token, onLight = false }) {
           )}
         </div>
 
-        <div className="flex items-center gap-2 text-[12px] font-semibold text-slate-400">
-          <span>Powered by</span>
-          <Logo className="h-3.5 w-auto text-slate-500" />
-        </div>
       </div>
 
       <div className="print-hide mx-auto mt-5 flex max-w-[340px] gap-2.5">
