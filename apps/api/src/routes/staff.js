@@ -4,7 +4,13 @@ import { z } from 'zod'
 import { guestServiceSchema, phoneSchema } from '@chqin/shared'
 import { body } from '../lib/validate.js'
 import { unauthorized } from '../lib/errors.js'
-import { COOKIE, cookieOptions, issue, read } from '../lib/session.js'
+import { COOKIE, cookieOptions, issue, read, revoke } from '../lib/session.js'
+import {
+  requestPasswordReset,
+  resetPassword,
+  sendVerificationEmail,
+  verifyEmail,
+} from '../services/staffMail.js'
 import {
   checkinCode,
   getBooking,
@@ -118,6 +124,16 @@ const loginRequest = z.object({
   password: z.string().min(1).max(200),
 })
 
+const forgotRequest = z.object({ email: z.email() })
+
+const resetRequest = z.object({
+  token: z.string().min(20).max(200),
+  // Same floor as registration: a reset must not be a way around it.
+  password: z.string().min(10).max(200),
+})
+
+const verifyRequest = z.object({ token: z.string().min(20).max(200) })
+
 /* ------------------------------------------------------------------ */
 /* Public                                                             */
 /* ------------------------------------------------------------------ */
@@ -127,22 +143,51 @@ staff.post('/register', body(registerRequest), async (c) => {
   setCookie(
     c,
     COOKIE,
-    issue({ staffId: result.staffId, venueId: result.venueId, role: 'owner' }),
+    await issue({ staffId: result.staffId, venueId: result.venueId, role: 'owner' }),
     cookieOptions(c),
   )
+  // Not awaited into the response: a slow mail provider should not hold up
+  // the screen that follows registration, and nothing here is gated on it.
+  sendVerificationEmail(result.staffId)
   return c.json({ name: result.name, venue: { name: result.venueName } })
 })
 
 staff.post('/login', body(loginRequest), async (c) => {
   const session = await login(c.get('body'))
-  setCookie(c, COOKIE, issue(session), cookieOptions(c))
+  setCookie(c, COOKIE, await issue(session), cookieOptions(c))
   return c.json({ name: session.name, role: session.role })
 })
 
-staff.post('/logout', (c) => {
-  // Clears the browser's copy. With a signed cookie there is nothing
-  // server-side to revoke — see lib/session.js.
+staff.post('/logout', async (c) => {
+  // Revoked server-side, not merely forgotten by the browser: that is the
+  // whole point of the sessions table.
+  await revoke(getCookie(c, COOKIE))
   deleteCookie(c, COOKIE, { path: '/' })
+  return c.json({ ok: true })
+})
+
+/**
+ * Reset, in two halves.
+ *
+ * The first always returns 200, whether or not the address has an account —
+ * an honest answer here is an account-enumeration oracle, the same reason
+ * `login` gives one message for both failures.
+ */
+staff.post('/password/forgot', body(forgotRequest), async (c) => {
+  await requestPasswordReset(c.get('body').email)
+  return c.json({ ok: true })
+})
+
+staff.post('/password/reset', body(resetRequest), async (c) => {
+  await resetPassword(c.get('body'))
+  // No cookie is set: the new password gets used at the sign-in screen, and
+  // signing them in from a link would defeat revoking the old sessions.
+  return c.json({ ok: true })
+})
+
+/** Confirms the address is real. Nothing is gated on it yet. */
+staff.post('/email/verify', body(verifyRequest), async (c) => {
+  await verifyEmail(c.get('body').token)
   return c.json({ ok: true })
 })
 
@@ -150,8 +195,16 @@ staff.post('/logout', (c) => {
 /* Everything below needs a session                                    */
 /* ------------------------------------------------------------------ */
 
+/*
+ * Ordering is the authorization boundary: this middleware guards every route
+ * registered below it, and the routes above — register, login, logout, and the
+ * three password/email link endpoints — are public because they sit above it.
+ * A new public route goes above this line, a new private one below.
+ */
 staff.use('/*', async (c, next) => {
-  const claims = read(getCookie(c, COOKIE))
+  // One indexed lookup, and the row is the authority — a revoked session is
+  // refused here rather than living out its expiry.
+  const claims = await read(getCookie(c, COOKIE))
   if (!claims) throw unauthorized('no_session', 'Sign in to continue.')
   c.set('session', claims)
   await next()

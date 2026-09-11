@@ -5,7 +5,10 @@
 # it needs no adapter: `npm start` runs the same src/index.js used locally.
 services:
   - type: web
-    name: chqin-api
+    # Matches the service that already exists. A different name here does not
+    # rename that service — it creates a second one alongside it, and the
+    # domain stays pointed at the first.
+    name: chqin-pwa
     runtime: node
     region: singapore
     plan: starter
@@ -17,6 +20,12 @@ services:
     # only that workspace's dependencies, and the build fails on a missing
     # import from a sibling package.
     buildCommand: cd ../.. && npm install
+    # Migrations run here, not in the build: a build can happen without a
+    # deploy following it, and preDeploy runs after the image is ready but
+    # before the new version takes traffic. A failed migration fails the
+    # deploy, which is the outcome you want — the alternative is a process
+    # booting against a schema it doesn't match.
+    preDeployCommand: npm run db:migrate
     startCommand: npm start
     healthCheckPath: /health
     autoDeploy: true
@@ -29,21 +38,61 @@ services:
       # environment. See README → Deploying.
       - key: DATABASE_URL
         sync: false
+      # Session mode, for the migration runner above.
       - key: DIRECT_URL
         sync: false
+      # What the live service is already serving. It is tempting to move this
+      # to the chqin.in apex — credentials would then work across app. and
+      # business. rather than only on app. — but every passkey already
+      # enrolled is bound to this exact string and would stop working. Only
+      # worth changing after confirming the credentials table is empty.
+      #
+      # Guests enrol on app.chqin.in and staff sign in with a password, so
+      # nothing needs the apex today.
       - key: RP_ID
-        sync: false
+        value: app.chqin.in
       - key: RP_NAME
         value: ChqIn
       - key: ORIGINS
-        sync: false
+        value: https://business.chqin.in,https://app.chqin.in
+      # api.chqin.in and business.chqin.in share a registrable domain, so the
+      # staff cookie is same-site and Lax is sent normally. Only correct while
+      # the API is served from that custom domain — on onrender.com the cookie
+      # is third party and this has to become None.
+      - key: COOKIE_SAMESITE
+        value: Lax
+      # NOT generateValue: this keys every *_hmac lookup column in the
+      # database. A regenerated value means no staff member can log in and no
+      # returning guest is recognised, with no way to repair the rows — the
+      # plaintext was never stored. Set once, by hand, and keep a copy
+      # somewhere that survives losing this service.
       - key: HASH_PEPPER
-        generateValue: true
+        sync: false
+      # Decrypts stored email addresses, so password reset has somewhere to
+      # send to. 32 bytes, base64. Same warning as HASH_PEPPER.
+      - key: ENCRYPTION_KEY
+        sync: false
+      # Resend, for password reset and address verification.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        value: ChqIn <no-reply@chqin.in>
+      # Where the links in those emails point.
+      - key: DASHBOARD_URL
+        value: https://business.chqin.in
       - key: PG_CA_CERT
         sync: false
-      # Without these the API refuses to boot in production: absent credentials
-      # mean identity checks would be simulated, which must never be silent.
-      - key: SANDBOX_API_KEY
+      # Optional: place search falls back to Nominatim when it is absent.
+      - key: GOOGLE_PLACES_KEY
         sync: false
-      - key: SANDBOX_API_SECRET
+      # TrueID (truid.one) — the KUA behind the Aadhaar check. Without these the
+      # API refuses to boot in production: absent credentials mean identity
+      # checks would be simulated, which must never be silent.
+      #
+      # TrueID whitelists callers by IP per environment, so this service's
+      # outbound addresses (Render → Settings → Outbound IPs) have to be
+      # registered with them before a live key works.
+      - key: TRUID_KEY_ID
+        sync: false
+      - key: TRUID_KEY_SECRET
         sync: false

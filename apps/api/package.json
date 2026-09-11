@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
+    "test": "node --test",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node src/db/migrate.js",
     "db:push": "drizzle-kit push",

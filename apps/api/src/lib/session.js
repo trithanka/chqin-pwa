@@ -1,45 +1,82 @@
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { and, eq, isNull } from 'drizzle-orm'
 import { config } from '../config.js'
+import { db } from '../db/client.js'
+import { staffSessions } from '../db/schema/index.js'
+import { newSessionToken, tokenHash } from './crypto.js'
 
 /**
- * Staff sessions as a signed cookie — no session table.
+ * Staff sessions as a row, not a self-contained signed cookie.
  *
- * The cookie carries who you are and which venue you're in, signed with
- * HASH_PEPPER. That's enough for read endpoints and keeps a whole table (and
- * the expiry job that comes with it) out of the system. The trade is real:
- * there is no server-side revocation, so a stolen cookie is valid until it
- * expires. Add a `staff_sessions` table the day that matters — logout today
- * only clears the browser's copy.
+ * This used to be an HMAC-signed payload carrying the claims — no table, no
+ * expiry job, and no way to revoke. That trade stops being worth it the moment
+ * real staff exist: logout only cleared the browser's copy, so a stolen cookie
+ * stayed valid for its full twelve hours and a dismissed employee kept access
+ * until it expired.
+ *
+ * Now the cookie holds an opaque random token and the row holds the claims.
+ * Revoking is an UPDATE, and it takes effect on the next request. The cost is
+ * one indexed lookup per authenticated request, which is the right price.
+ *
+ * A side effect worth naming: sessions no longer depend on HASH_PEPPER, so
+ * changing that secret no longer logs everyone out on top of everything else
+ * it breaks.
  */
 
 export const COOKIE = 'chqin_staff'
 const MAX_AGE_SECONDS = 60 * 60 * 12
 
-const sign = (payload) =>
-  createHmac('sha256', config.HASH_PEPPER).update(payload).digest('base64url')
-
-export function issue({ staffId, venueId, role }) {
-  const payload = Buffer.from(
-    JSON.stringify({ staffId, venueId, role, exp: Date.now() + MAX_AGE_SECONDS * 1000 }),
-  ).toString('base64url')
-  return `${payload}.${sign(payload)}`
+/** Creates the row and returns the token that addresses it. */
+export async function issue({ staffId, venueId, role }) {
+  const token = newSessionToken()
+  await db.insert(staffSessions).values({
+    staffId,
+    venueId,
+    role,
+    tokenHash: tokenHash(token),
+    expiresAt: new Date(Date.now() + MAX_AGE_SECONDS * 1000),
+  })
+  return token
 }
 
-export function read(token) {
-  if (!token || !token.includes('.')) return null
-  const [payload, signature] = token.split('.')
+/** The claims behind a cookie, or null if it is expired, revoked or forged. */
+export async function read(token) {
+  if (!token) return null
 
-  const expected = Buffer.from(sign(payload))
-  const given = Buffer.from(signature)
-  if (expected.length !== given.length || !timingSafeEqual(expected, given)) return null
+  const session = await db.query.staffSessions.findFirst({
+    where: (s, { eq: e, and: a, isNull: n, gt: g }) =>
+      a(e(s.tokenHash, tokenHash(token)), n(s.revokedAt), g(s.expiresAt, new Date())),
+  })
+  if (!session) return null
 
-  try {
-    const claims = JSON.parse(Buffer.from(payload, 'base64url').toString())
-    return claims.exp > Date.now() ? claims : null
-  } catch {
-    return null
-  }
+  return { staffId: session.staffId, venueId: session.venueId, role: session.role, sessionId: session.id }
 }
+
+/** Logout. Idempotent: an already-revoked or unknown token is not an error. */
+export async function revoke(token) {
+  if (!token) return
+  await db
+    .update(staffSessions)
+    .set({ revokedAt: new Date() })
+    .where(and(eq(staffSessions.tokenHash, tokenHash(token)), isNull(staffSessions.revokedAt)))
+}
+
+/**
+ * Ends every session this person has anywhere.
+ *
+ * Called on password reset. Without it, resetting the password does not
+ * dislodge whoever prompted the reset — they keep the cookie they stole.
+ */
+export async function revokeAllFor(staffId) {
+  await db
+    .update(staffSessions)
+    .set({ revokedAt: new Date() })
+    .where(and(eq(staffSessions.staffId, staffId), isNull(staffSessions.revokedAt)))
+}
+
+// ponytail: expired rows are left in place. They can never authenticate — the
+// lookup requires expires_at in the future — and a dozen dead rows per staff
+// member per year is not a table anyone will notice. Add a scheduled delete if
+// it ever is; a prune fired from a request path just hides its own failures.
 
 /**
  * `secure` has to be off over plain http or the browser silently drops the

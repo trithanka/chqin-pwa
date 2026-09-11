@@ -6,10 +6,11 @@
  * back. These are the opposite: one line, visible in a diff, reviewed like any
  * other change.
  *
- * Every one of them makes the system *less* real. Production warns loudly at
- * boot when one is on — see the guards at the bottom of config.js — but for
- * SIMULATE_AADHAAR it no longer refuses to start: the hosted deploy is a demo
- * that must not bill UIDAI, and this file is the only switch that reaches it.
+ * Every one of them makes the system *less* real. Production refuses to start
+ * with one on — see the guards at the bottom of config.js. That guard was once
+ * relaxed for SIMULATE_AADHAAR, to let the hosted deploy run as a demo. It is
+ * back, because the deploy now takes real guests: a flag left on here would
+ * turn every identity check into "any six digits pass" without anyone noticing.
  */
 
 /**
@@ -27,4 +28,4 @@
  * `SIMULATE_AADHAAR=true` in .env does the same thing, for a machine where you
  * would rather not touch the code.
  */
-export const SIMULATE_AADHAAR = true
+export const SIMULATE_AADHAAR = false

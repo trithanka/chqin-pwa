@@ -3,10 +3,10 @@ import { db } from '../db/client.js'
 import { identityVerifications } from '../db/schema/index.js'
 import { lookupHash } from '../lib/crypto.js'
 import { ApiError, notFound } from '../lib/errors.js'
-import { generateOkycOtp, liveAadhaar, verifyOkycOtp } from '../lib/sandbox.js'
+import { PROVIDER, generateOkycOtp, liveAadhaar, verifyOkycOtp } from '../lib/truid.js'
 
 /**
- * Aadhaar identity verification, through Sandbox (sandbox.co.in) as KUA.
+ * Aadhaar identity verification, through TrueID (truid.one) as KUA.
  *
  * Aadhaar OTP eKYC can only be performed by a UIDAI-licensed AUA/KUA, and the
  * demographic response comes from UIDAI — never from us. With credentials
@@ -18,7 +18,7 @@ import { generateOkycOtp, liveAadhaar, verifyOkycOtp } from '../lib/sandbox.js'
  * What is deliberately never stored: the Aadhaar number itself. The Aadhaar Act
  * restricts holding it, and a hotel has no need to — a keyed hash recognises a
  * returning guest and the last four digits are all a human ever needs to see.
- * The number reaches Sandbox and this process's memory, and nowhere else.
+ * The number reaches TrueID and this process's memory, and nowhere else.
  */
 
 const OTP_TTL_MS = 5 * 60 * 1000
@@ -54,8 +54,8 @@ export function isValidAadhaar(value) {
  *
  * Verhoeff first, then the provider, then the row: a typo shouldn't cost a
  * billed transaction, and a refused number shouldn't leave a dangling
- * `manual_review` record behind. What comes back is our own row id — Sandbox's
- * reference_id stays server-side in provider_ref.
+ * `manual_review` record behind. What comes back is our own row id — TrueID's
+ * session_id stays server-side in provider_ref.
  */
 export async function requestAadhaarOtp(session, aadhaar) {
   const digits = aadhaar.replace(/\s/g, '')
@@ -73,7 +73,7 @@ export async function requestAadhaarOtp(session, aadhaar) {
       sessionId: session.id,
       guestId: session.guestId ?? null,
       method: 'aadhaar_otp',
-      provider: live ? 'sandbox' : 'simulated',
+      provider: live ? PROVIDER : 'simulated',
       providerRef,
       documentType: 'aadhaar',
       documentHmac: lookupHash(digits),
@@ -96,7 +96,7 @@ export async function requestAadhaarOtp(session, aadhaar) {
 /**
  * Check the OTP and return the holder's details.
  *
- * The demographics come from UIDAI via Sandbox. In the fallback they're
+ * The demographics come from UIDAI via TrueID. In the fallback they're
  * invented and flagged as such.
  */
 export async function verifyAadhaarOtp(session, { requestId, otp, consent }) {
@@ -124,7 +124,10 @@ export async function verifyAadhaarOtp(session, { requestId, otp, consent }) {
     throw new ApiError('otp_expired', 'That code expired. Request a new one.', 400)
   }
 
-  const live = pending.provider === 'sandbox' && pending.providerRef
+  // Rows written by the previous provider keep its name; only a row from the
+  // provider running now can be completed, because only it holds a reference
+  // the current API would recognise.
+  const live = pending.provider === PROVIDER && pending.providerRef
 
   // While running live, a row that didn't go through the provider must not be
   // completable — otherwise a request begun while credentials were absent (or
@@ -162,7 +165,7 @@ export async function verifyAadhaarOtp(session, { requestId, otp, consent }) {
 /**
  * UIDAI's answer, in this application's shape.
  *
- * The photo, address and hashed contact details Sandbox also returns are
+ * The photo, address and care-of details TrueID also returns are
  * dropped here rather than stored: a guest register needs a name, a date of
  * birth and a gender, and everything beyond that is a liability with no reader.
  */
@@ -181,12 +184,12 @@ function holderFrom(data, last4) {
   // in question here, never the value.
   if (data.date_of_birth && !subject.dateOfBirth) {
     console.warn(
-      'sandbox: unparsed date_of_birth, shape',
+      'truid: unparsed date_of_birth, shape',
       String(data.date_of_birth).replace(/\d/g, 'N'),
     )
   }
   if (data.gender && subject.gender === 'undisclosed') {
-    console.warn('sandbox: unmapped gender code', JSON.stringify(data.gender))
+    console.warn('truid: unmapped gender code', JSON.stringify(data.gender))
   }
 
   return subject

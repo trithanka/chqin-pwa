@@ -1,6 +1,11 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import LoginPage from './auth/LoginPage'
 import RegisterPage from './auth/RegisterPage'
+import {
+  ForgotPasswordPage,
+  ResetPasswordPage,
+  VerifyEmailPage,
+} from './auth/PasswordResetPage'
 import Layout from './dashboard/Layout'
 import TodayPage from './dashboard/TodayPage'
 import BookingsPage, { BookingDetailPage } from './dashboard/BookingsPage'
@@ -34,6 +39,12 @@ export default function App() {
     <Routes>
       <Route path="/" element={signedIn ? <Navigate to="/app" replace /> : <LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+
+      {/* Reachable signed in or out: a reset link is opened from an inbox,
+          which may well be on a device that is still signed in as someone. */}
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/verify-email" element={<VerifyEmailPage />} />
 
       <Route path="/app" element={signedIn ? <Layout /> : <Navigate to="/" replace />}>
         <Route index element={<TodayPage />} />

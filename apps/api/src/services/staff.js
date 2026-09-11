@@ -13,7 +13,7 @@ import {
   staffUsers,
   venues,
 } from '../db/schema/index.js'
-import { newSessionToken, lookupHash, tokenHash } from '../lib/crypto.js'
+import { newSessionToken, lookupHash, tokenHash, encrypt } from '../lib/crypto.js'
 import { hashPassword, verifyPassword } from '../lib/passwords.js'
 import { conflict, notFound, unauthorized } from '../lib/errors.js'
 
@@ -53,7 +53,11 @@ export async function register({
   return transaction(async (tx) => {
     const [staff] = await tx
       .insert(staffUsers)
-      .values({ emailHmac, displayName: account.name, passwordHash })
+      // The address is stored twice on purpose: hashed to find the account at
+      // login, encrypted so password reset has somewhere to send to. Only the
+      // hash existed before, which meant a locked-out owner was locked out
+      // permanently — nothing in the system knew their email.
+      .values({ emailHmac, emailEnc: encrypt(account.email), displayName: account.name, passwordHash })
       .returning({ id: staffUsers.id, displayName: staffUsers.displayName })
 
     const [venue] = await tx

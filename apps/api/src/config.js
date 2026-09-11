@@ -36,6 +36,27 @@ const schema = z.object({
     .transform((value) => value.split(',').map((o) => o.trim()).filter(Boolean)),
 
   HASH_PEPPER: z.string().default('dev-only-pepper-change-me'),
+
+  /**
+   * Key for the encrypted columns — today, staff and guest email addresses.
+   * 32 bytes, base64. Separate from HASH_PEPPER on purpose: one finds a row,
+   * the other reads it, and a leak of either should not be a leak of both.
+   *
+   * Generate with: node -e "console.log(crypto.randomBytes(32).toString('base64'))"
+   */
+  ENCRYPTION_KEY: z.string().default('ZGV2LW9ubHkta2V5LWNoYW5nZS1tZS0zMi1ieXRlcyE='),
+
+  /**
+   * Resend, for password reset and address verification. Absent, the mail
+   * body is printed to the log instead of sent — which is what you want
+   * locally and is refused in production by the guard at the bottom.
+   */
+  RESEND_API_KEY: z.string().optional(),
+  MAIL_FROM: z.string().default('ChqIn <no-reply@chqin.in>'),
+  /** Where the links inside those emails point. */
+  DASHBOARD_URL: z.string().default('http://localhost:5174'),
+  /** How long a reset or verification link stays usable. */
+  MAIL_TOKEN_TTL_MS: z.coerce.number().default(60 * 60_000),
   // Hosts that don't ship the repo's files (serverless bundles) can pass the
   // database's CA certificate directly instead.
   PG_CA_CERT: z.string().optional(),
@@ -56,17 +77,6 @@ const schema = z.object({
   SESSION_TTL_MS: z.coerce.number().default(300_000),
 
   /**
-   * Sandbox (sandbox.co.in) — the KUA behind the Aadhaar OKYC check.
-   *
-   * Absent, identity verification falls back to a simulation, which is why the
-   * guard at the bottom of this file refuses to start production without them:
-   * a missing env var must not quietly turn invented demographics into a
-   * `passed` verification.
-   *
-   * Live keys only work against the production host; test keys only against
-   * test-api. A mismatched pair fails at /authenticate, looking like a bad key.
-   */
-  /**
    * Identifies this deployment to Nominatim, whose usage policy asks for a way
    * to contact whoever is making the requests. A shared or absent identity is
    * what gets an application blocked.
@@ -74,7 +84,15 @@ const schema = z.object({
   CONTACT_URL: z.string().default('https://chqin.in'),
 
   /**
-   * Forces the Aadhaar simulation even when Sandbox credentials are present.
+   * Google Places (New). Optional: without it, place search falls back to
+   * Nominatim, which is free but thin on hotels outside Europe. With it, the
+   * key is used server-side only — a browser key would be scraped and billed
+   * to us.
+   */
+  GOOGLE_PLACES_KEY: z.string().optional(),
+
+  /**
+   * Forces the Aadhaar simulation even when TrueID credentials are present.
    *
    * The same switch as `SIMULATE_AADHAAR` in devFlags.js — either one turns it
    * on. Flipping the constant is the usual way; this exists for a machine
@@ -86,11 +104,21 @@ const schema = z.object({
     .default('false')
     .transform((v) => ['1', 'true', 'yes', 'on'].includes(v.trim().toLowerCase())),
 
-  SANDBOX_API_KEY: z.string().optional(),
-  SANDBOX_API_SECRET: z.string().optional(),
-  SANDBOX_BASE_URL: z.string().default('https://api.sandbox.co.in'),
-  // Sent to UIDAI and shown in Sandbox's transaction log; keep it truthful.
-  SANDBOX_KYC_REASON: z.string().default('Hotel guest check-in identity verification'),
+  /**
+   * TrueID (truid.one) — the KUA behind the Aadhaar OKYC check.
+   *
+   * Absent, identity verification falls back to a simulation, which is why the
+   * guard at the bottom of this file refuses to start production without them:
+   * a missing env var must not quietly turn invented demographics into a
+   * `passed` verification.
+   *
+   * The key decides the environment — a TEST_ key and a live key use the same
+   * base URL. Callers are also IP-whitelisted per environment, so a correct key
+   * from an unlisted address fails with 403, not 401.
+   */
+  TRUID_KEY_ID: z.string().optional(),
+  TRUID_KEY_SECRET: z.string().optional(),
+  TRUID_BASE_URL: z.string().default('https://service-api.truid.one/api/v1'),
 })
 
 /**
@@ -148,30 +176,44 @@ if (config.HASH_PEPPER.startsWith('dev-only') && process.env.NODE_ENV === 'produ
   process.exit(1)
 }
 
+if (process.env.NODE_ENV === 'production') {
+  // Same reasoning as the pepper: the default key is public, so anything
+  // written under it is plaintext to anyone holding this repository.
+  if (config.ENCRYPTION_KEY.startsWith('ZGV2LW9ubHkt')) {
+    console.error('ENCRYPTION_KEY is still the development default. Refusing to start.')
+    process.exit(1)
+  }
+  // Without a mail provider, password reset silently becomes a log line and
+  // a locked-out owner has no way back in.
+  if (!config.RESEND_API_KEY) {
+    console.error('RESEND_API_KEY is missing, so password reset mail cannot be sent. Refusing to start.')
+    process.exit(1)
+  }
+}
+
 if (
   process.env.NODE_ENV === 'production' &&
-  !(config.SANDBOX_API_KEY && config.SANDBOX_API_SECRET)
+  !(config.TRUID_KEY_ID && config.TRUID_KEY_SECRET)
 ) {
-  console.error('SANDBOX_API_KEY/SANDBOX_API_SECRET are missing, so identity checks would be simulated. Refusing to start.')
+  console.error('TRUID_KEY_ID/TRUID_KEY_SECRET are missing, so identity checks would be simulated. Refusing to start.')
   process.exit(1)
 }
 
 // Credentials present and simulation forced is the more dangerous shape of the
 // same mistake: it looks configured, and every guest passes.
 //
-// This used to refuse to start. It doesn't any more, deliberately: the hosted
-// deploy is a demo that must not bill UIDAI transactions, and the switch that
-// turns UIDAI off has to be the committed one in devFlags.js. So production can
-// run simulated — and says so on every boot, as loudly as a log line can.
-//
-// Before real guests check in here: set SIMULATE_AADHAAR back to false in
-// src/devFlags.js. Nothing else enforces it.
+// This was briefly a warning rather than a refusal, so the hosted deploy could
+// run as a demo without billing UIDAI. It is a refusal again: real guests check
+// in against this deploy now, and a flag left on turns the Aadhaar check into
+// decoration while the records it writes stay indistinguishable from verified
+// ones. A demo that needs simulation can run without credentials instead.
 if (process.env.NODE_ENV === 'production' && simulateAadhaar()) {
-  console.warn(
+  console.error(
     `\n${'!'.repeat(72)}\n` +
       `  SIMULATED AADHAAR IN PRODUCTION (${simulateAadhaarSource()})\n` +
-      '  No UIDAI call is made. Any six-digit code passes. Every identity\n' +
-      '  record written here is unverified. Demo only.\n' +
+      '  No UIDAI call would be made and any six-digit code would pass.\n' +
+      '  Refusing to start.\n' +
       `${'!'.repeat(72)}\n`,
   )
+  process.exit(1)
 }

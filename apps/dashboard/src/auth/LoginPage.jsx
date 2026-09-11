@@ -9,8 +9,8 @@ import Logo from '../components/Logo'
 /**
  * Staff sign-in: email and password, set during registration.
  *
- * Prototype — there is no staff auth on the API yet, so any well-formed pair
- * gets you in. When it lands, the only change here is what `submit` awaits.
+ * The API answers the same way for a wrong email and a wrong password, so
+ * whatever it says is what this screen shows.
  */
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -83,12 +83,12 @@ export default function LoginPage() {
         />
 
         <div className="-mt-1 text-right">
-          <button
-            type="button"
+          <Link
+            to="/forgot-password"
             className="text-[12.5px] font-semibold text-slate-500 hover:text-brand"
           >
             Forgot password?
-          </button>
+          </Link>
         </div>
 
         <Button type="submit" loading={busy} iconRight={ArrowRight}>

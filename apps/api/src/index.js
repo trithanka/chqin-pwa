@@ -1,7 +1,7 @@
 import { serve } from '@hono/node-server'
 import { app } from './app.js'
 import { config, isRemote, simulateAadhaarSource } from './config.js'
-import { liveAadhaar } from './lib/sandbox.js'
+import { liveAadhaar } from './lib/truid.js'
 import { pool } from './db/client.js'
 
 const server = serve({ fetch: app.fetch, port: config.PORT }, (info) => {
@@ -14,8 +14,8 @@ const server = serve({ fetch: app.fetch, port: config.PORT }, (info) => {
   // the database — both are toggled by hand and both are easy to be wrong about.
   console.log(
     liveAadhaar()
-      ? 'aadhaar  → sandbox (live UIDAI calls)'
-      : `aadhaar  → simulated (${simulateAadhaarSource() ?? 'no sandbox credentials'}) — any 6-digit code passes`,
+      ? 'aadhaar  → truid (live UIDAI calls)'
+      : `aadhaar  → simulated (${simulateAadhaarSource() ?? 'no truid credentials'}) — any 6-digit code passes`,
   )
 
   if (config.COOKIE_SAMESITE === 'None') {

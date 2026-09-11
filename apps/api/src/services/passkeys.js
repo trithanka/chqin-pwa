@@ -18,7 +18,7 @@ import {
 import { lookupHash } from '../lib/crypto.js'
 import { uuidv7 } from '../lib/ids.js'
 import { ApiError, forbidden, unauthorized } from '../lib/errors.js'
-import { liveAadhaar } from '../lib/sandbox.js'
+import { PROVIDER, liveAadhaar } from '../lib/truid.js'
 import { attachBooking, bindGuest } from './sessions.js'
 import { verifiedSubject } from './identity.js'
 
@@ -92,7 +92,7 @@ export async function startRegistration(session) {
   const passed = await db.query.identityVerifications.findFirst({
     where: (v, { and: a, eq: e }) =>
       liveAadhaar()
-        ? a(e(v.sessionId, session.id), e(v.result, 'passed'), e(v.provider, 'sandbox'))
+        ? a(e(v.sessionId, session.id), e(v.result, 'passed'), e(v.provider, PROVIDER))
         : a(e(v.sessionId, session.id), e(v.result, 'passed')),
   })
   if (!passed) throw forbidden('verification_required', 'Complete the identity check first.')
