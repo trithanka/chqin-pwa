@@ -30,7 +30,7 @@ export default function ServicesStep({ data, patch, errors }) {
         <p className="mb-3 text-[13px] font-medium text-red-400">{errors.services}</p>
       )}
 
-      <Card className="divide-y divide-onb-line overflow-hidden">
+      <Card className="divide-y divide-white/[0.06] overflow-hidden">
         {GUEST_SERVICES.map((key) => (
           <CheckRow
             key={key}
@@ -43,7 +43,7 @@ export default function ServicesStep({ data, patch, errors }) {
         ))}
       </Card>
 
-      <p className="mt-4 text-[13px] leading-relaxed text-onb-muted">
+      <p className="mt-4 text-[13px] leading-relaxed text-slate-400">
         You'll say where each of these should go on the next-but-one screen.
       </p>
     </div>

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
+  AlertTriangle,
   ArrowLeft,
   CalendarCheck,
   Clock,
@@ -14,9 +16,11 @@ import {
   ShieldCheck,
   Sparkles,
   Users,
+  X,
 } from 'lucide-react'
 import { useSession } from '../session'
 import Logo from '../components/Logo'
+import { Button } from '../components/ui'
 
 const NAV = [
   {
@@ -81,6 +85,19 @@ export default function Layout() {
   const [timeStr, setTimeStr] = useState(() =>
     new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   )
+  const [showLogoutModal, setShowLogoutModal] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
+
+  const handleLogout = async () => {
+    setLoggingOut(true)
+    try {
+      await signOut()
+      navigate('/')
+    } finally {
+      setLoggingOut(false)
+      setShowLogoutModal(false)
+    }
+  }
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -113,6 +130,17 @@ export default function Layout() {
               Business
             </span>
           </div>
+
+          {/* Mobile Sign out trigger */}
+          <button
+            type="button"
+            aria-label="Sign out"
+            title="Sign out"
+            onClick={() => setShowLogoutModal(true)}
+            className="lg:hidden rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white/10 hover:text-red-400 cursor-pointer"
+          >
+            <LogOut size={16} />
+          </button>
         </div>
 
         {/* Property Badge */}
@@ -193,11 +221,8 @@ export default function Layout() {
               type="button"
               aria-label="Sign out"
               title="Sign out"
-              onClick={async () => {
-                await signOut()
-                navigate('/')
-              }}
-              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white/10 hover:text-red-400"
+              onClick={() => setShowLogoutModal(true)}
+              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white/10 hover:text-red-400 cursor-pointer"
             >
               <LogOut size={16} />
             </button>
@@ -280,7 +305,98 @@ export default function Layout() {
           </div>
         </main>
       </div>
+
+      {/* Logout Warning Confirmation Modal */}
+      <LogoutConfirmModal
+        isOpen={showLogoutModal}
+        onClose={() => setShowLogoutModal(false)}
+        onConfirm={handleLogout}
+        loading={loggingOut}
+        user={user}
+      />
     </div>
+  )
+}
+
+/**
+ * Warning prompt modal before logging out of front desk.
+ */
+function LogoutConfirmModal({ isOpen, onClose, onConfirm, loading, user }) {
+  useEffect(() => {
+    if (!isOpen) return
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && !loading) onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, onClose, loading])
+
+  if (!isOpen) return null
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs transition-opacity"
+        onClick={!loading ? onClose : undefined}
+      />
+
+      {/* Modal Container */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="logout-title"
+        className="relative z-10 w-full max-w-[420px] rounded-2xl border border-slate-200/90 bg-white p-6 shadow-2xl transition-all"
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={loading}
+          aria-label="Close"
+          className="absolute right-4 top-4 rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors cursor-pointer"
+        >
+          <X size={18} />
+        </button>
+
+        <div className="flex items-start gap-4">
+          <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-red-50 text-red-600 border border-red-100 shadow-xs">
+            <AlertTriangle size={22} strokeWidth={2.2} />
+          </div>
+
+          <div className="min-w-0 flex-1 pt-0.5">
+            <h3 id="logout-title" className="text-[17px] font-extrabold text-slate-900 tracking-tight">
+              Sign out of Front Desk?
+            </h3>
+            <p className="mt-1.5 text-[13.5px] leading-relaxed text-slate-600">
+              Are you sure you want to end your active session? You will need your credentials (
+              <span className="font-semibold text-slate-800">{user?.email || 'work email'}</span>
+              ) to sign back in.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6 flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+          <Button
+            type="button"
+            tone="secondary"
+            onClick={onClose}
+            disabled={loading}
+          >
+            Cancel
+          </Button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-[13.5px] font-bold text-white shadow-sm shadow-red-500/20 hover:bg-red-700 active:scale-[0.98] transition-all disabled:opacity-40 cursor-pointer"
+          >
+            <LogOut size={15} strokeWidth={2.2} />
+            {loading ? 'Signing out…' : 'Sign Out'}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   )
 }
 

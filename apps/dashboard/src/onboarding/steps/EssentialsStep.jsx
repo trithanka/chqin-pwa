@@ -104,7 +104,7 @@ export default function EssentialsStep({ data, patch }) {
             rows={3}
             value={data.essentials.notes}
             onChange={(e) => set('notes', e.target.value)}
-            className="w-full rounded-xl border border-onb-line bg-onb-raised px-4 py-3 text-[16px] leading-relaxed text-onb-text placeholder:text-onb-muted/60 focus:border-onb-green focus:outline-none"
+            className="w-full rounded-xl border border-white/[0.09] bg-slate-900/90 px-4 py-3 text-[16px] leading-relaxed text-slate-100 placeholder:text-slate-500 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400/40"
           />
         </Field>
       </Card>

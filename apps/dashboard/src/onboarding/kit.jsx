@@ -16,7 +16,7 @@ import { STRENGTH_LABEL, passwordStrength } from '../lib/password'
 export function Card({ children, className = '' }) {
   return (
     <div
-      className={`rounded-2xl border border-onb-line bg-onb-surface ${className}`}
+      className={`rounded-2xl border border-white/[0.08] bg-slate-900/90 shadow-sm backdrop-blur-sm ${className}`}
     >
       {children}
     </div>
@@ -35,9 +35,11 @@ export function Button({
   className = '',
 }) {
   const tones = {
-    primary: 'bg-onb-green text-onb-ink hover:bg-onb-green-dark',
-    secondary: 'bg-onb-raised text-onb-text border border-onb-line hover:border-onb-green/40',
-    ghost: 'text-onb-muted hover:text-onb-text',
+    primary:
+      'bg-gradient-to-r from-blue-600 via-blue-500 to-sky-500 text-white hover:from-blue-500 hover:to-sky-400 shadow-lg shadow-blue-500/20 active:scale-[0.99] border-0',
+    secondary:
+      'bg-slate-800/90 text-white border border-slate-700/80 hover:border-sky-400/50 hover:bg-slate-800 transition-all active:scale-[0.99]',
+    ghost: 'text-slate-400 hover:text-white transition-colors',
   }
 
   return (
@@ -45,7 +47,7 @@ export function Button({
       type={type}
       onClick={onClick}
       disabled={disabled || loading}
-      className={`inline-flex h-12 items-center justify-center gap-2 rounded-xl px-5 text-[15px] font-bold tracking-[-0.01em] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${tones[tone]} ${className}`}
+      className={`inline-flex h-12 items-center justify-center gap-2 rounded-xl px-5 text-[15px] font-bold tracking-[-0.01em] transition-all disabled:cursor-not-allowed disabled:opacity-40 ${tones[tone]} ${className}`}
     >
       {loading ? (
         <LoaderCircle size={17} className="animate-spin" />
@@ -79,14 +81,14 @@ export function Field({ label, hint, error, children, className = '' }) {
 }
 
 const control =
-  'w-full h-12 rounded-xl border bg-onb-raised px-4 text-[16px] text-onb-text transition-colors placeholder:text-onb-muted/60 focus:outline-none'
+  'w-full h-12 rounded-xl border border-white/[0.09] bg-slate-900/90 px-4 text-[16px] text-slate-100 transition-colors placeholder:text-slate-500 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400/40'
 
 export function Input({ invalid, className = '', ...props }) {
   return (
     <input
       {...props}
       className={`${control} ${
-        invalid ? 'border-red-500/60' : 'border-onb-line focus:border-onb-green'
+        invalid ? 'border-red-500/60 focus:border-red-500' : ''
       } ${className}`}
     />
   )
@@ -97,11 +99,11 @@ export function Select({ children, invalid, className = '', ...props }) {
     <select
       {...props}
       className={`${control} appearance-none bg-[length:16px] bg-[right_1rem_center] bg-no-repeat pr-11 ${
-        invalid ? 'border-red-500/60' : 'border-onb-line focus:border-onb-green'
+        invalid ? 'border-red-500/60 focus:border-red-500' : ''
       } ${className}`}
       style={{
         backgroundImage:
-          "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%237c8d84' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E\")",
+          "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E\")",
       }}
     >
       {children}
@@ -127,19 +129,19 @@ export function CheckRow({ icon: Icon, label, sub, checked, onChange }) {
       {Icon && (
         <span
           className={`grid size-9 shrink-0 place-items-center rounded-xl transition-colors ${
-            checked ? 'bg-onb-green-soft text-onb-green' : 'bg-onb-raised text-onb-muted'
+            checked ? 'bg-sky-500/15 text-sky-400' : 'bg-slate-800 text-slate-400'
           }`}
         >
           <Icon size={17} strokeWidth={2} />
         </span>
       )}
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[15px] font-semibold text-onb-text">{label}</span>
-        {sub && <span className="block truncate text-[13px] text-onb-muted">{sub}</span>}
+        <span className="block truncate text-[15px] font-semibold text-slate-100">{label}</span>
+        {sub && <span className="block truncate text-[13px] text-slate-400">{sub}</span>}
       </span>
       <span
         className={`grid size-6 shrink-0 place-items-center rounded-md border-2 transition-colors ${
-          checked ? 'border-onb-green bg-onb-green text-onb-ink' : 'border-onb-line'
+          checked ? 'border-sky-400 bg-sky-400 text-slate-950' : 'border-slate-700'
         }`}
       >
         {checked && <Check size={14} strokeWidth={3.4} />}
@@ -148,27 +150,28 @@ export function CheckRow({ icon: Icon, label, sub, checked, onChange }) {
   )
 }
 
-/** A fact that has been confirmed — the green ticks down the right of the flow. */
+/** A fact that has been confirmed — the check ticks down the right of the flow. */
 export function ConfirmedRow({ label, value }) {
   return (
-    <div className="flex items-center gap-3 border-b border-onb-line px-4 py-3 last:border-0">
+    <div className="flex items-center gap-3 border-b border-white/[0.06] px-4 py-3 last:border-0">
       <span className="min-w-0 flex-1">
-        <span className="block text-[12px] text-onb-muted">{label}</span>
-        <span className="block truncate text-[14.5px] font-semibold text-onb-text">{value}</span>
+        <span className="block text-[12px] text-slate-400">{label}</span>
+        <span className="block truncate text-[14.5px] font-semibold text-slate-100">{value}</span>
       </span>
-      <Check size={16} strokeWidth={3} className="shrink-0 text-onb-green" />
+      <Check size={16} strokeWidth={3} className="shrink-0 text-sky-400" />
     </div>
   )
 }
 
 export function Pill({ children, tone = 'neutral' }) {
   const tones = {
-    neutral: 'bg-onb-raised text-onb-muted',
-    green: 'bg-onb-green-soft text-onb-green',
+    neutral: 'bg-slate-800 text-slate-300 border border-slate-700/60',
+    green: 'bg-sky-500/15 text-sky-300 border border-sky-400/20',
+    brand: 'bg-sky-500/15 text-sky-300 border border-sky-400/20',
   }
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11.5px] font-bold ${tones[tone]}`}
+      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11.5px] font-bold ${tones[tone] || tones.neutral}`}
     >
       {children}
     </span>
@@ -178,17 +181,10 @@ export function Pill({ children, tone = 'neutral' }) {
 /**
  * A document the property can hand over — and an honest label on what happens
  * to it.
- *
- * ponytail: the file is held in the browser and never uploaded — there is no
- * upload route and no storage in the API. Where a caller can read the file
- * locally (the GST certificate's PDF text layer) it passes a `status` line
- * saying what it found; where it can't, the card says so instead of printing
- * line items nobody parsed. Wire it to a real POST /staff/documents when the
- * file itself needs to be kept.
  */
 export function UploadCard({ label, hint, accept, file, onFile, status }) {
   return (
-    <div className="rounded-2xl border border-dashed border-onb-line bg-onb-surface p-4">
+    <div className="rounded-2xl border border-dashed border-white/[0.12] bg-slate-900/80 p-4">
       <label className="flex cursor-pointer items-center gap-3">
         <input
           type="file"
@@ -196,23 +192,23 @@ export function UploadCard({ label, hint, accept, file, onFile, status }) {
           className="sr-only"
           onChange={(e) => onFile(e.target.files?.[0] ?? null)}
         />
-        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-onb-green-soft text-[18px] text-onb-green">
+        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-sky-500/15 text-[18px] font-bold text-sky-400">
           +
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[15px] font-semibold text-onb-text">
+          <span className="block truncate text-[15px] font-semibold text-slate-100">
             {file ? file.name : label}
           </span>
-          <span className="block truncate text-[13px] text-onb-muted">
+          <span className="block truncate text-[13px] text-slate-400">
             {file ? `${Math.round(file.size / 1024)} KB · attached` : hint}
           </span>
         </span>
       </label>
 
       {file && (
-        <div className="mt-3 rounded-xl bg-onb-raised px-3 py-2.5">
+        <div className="mt-3 rounded-xl bg-slate-800/80 px-3 py-2.5">
           {status ?? (
-            <p className="text-[12.5px] leading-relaxed text-onb-muted">
+            <p className="text-[12.5px] leading-relaxed text-slate-400">
               Kept on this device for now — attaching it doesn't send it
               anywhere yet.
             </p>
@@ -277,8 +273,8 @@ export function PasswordInput({ label, value, onChange, error, hint, meter = fal
                 key={i}
                 className={`h-1 flex-1 rounded-full transition-colors ${
                   strength > i
-                    ? ['bg-red-400', 'bg-amber-400', 'bg-onb-green'][strength - 1]
-                    : 'bg-onb-line'
+                    ? ['bg-red-400', 'bg-amber-400', 'bg-sky-400'][strength - 1]
+                    : 'bg-slate-800'
                 }`}
               />
             ))}

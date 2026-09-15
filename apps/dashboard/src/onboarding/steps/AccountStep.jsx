@@ -39,21 +39,23 @@ export default function AccountStep({ data, patch, errors }) {
           />
         </Field>
 
-        <PasswordInput
-          label="Password"
-          value={data.account.password}
-          onChange={(value) => set('password', value)}
-          error={errors.password}
-          hint={`At least ${MIN_LENGTH} characters. A few words you'll remember beats a short one with symbols.`}
-          meter
-        />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <PasswordInput
+            label="Password"
+            value={data.account.password}
+            onChange={(value) => set('password', value)}
+            error={errors.password}
+            hint={`Min ${MIN_LENGTH} characters.`}
+            meter
+          />
 
-        <PasswordInput
-          label="Confirm password"
-          value={data.account.confirmPassword}
-          onChange={(value) => set('confirmPassword', value)}
-          error={errors.confirmPassword}
-        />
+          <PasswordInput
+            label="Confirm password"
+            value={data.account.confirmPassword}
+            onChange={(value) => set('confirmPassword', value)}
+            error={errors.confirmPassword}
+          />
+        </div>
 
         <Field label="Your role" hint="Sets what you can change. Everyone can run check-ins.">
           <Select value={data.account.role} onChange={(e) => set('role', e.target.value)}>

@@ -43,13 +43,13 @@ export default function LiveStep({ data, onRestart, onComplete }) {
         {/* Printing drops everything but the card: `.print-card` is fixed to
             the page, so anything still flowing prints underneath it. */}
         <div className="print-hide flex flex-col items-center">
-          <span className="mb-6 grid size-16 place-items-center rounded-full bg-onb-green text-onb-ink">
+          <span className="mb-6 grid size-16 place-items-center rounded-full bg-gradient-to-tr from-blue-600 to-sky-400 text-white shadow-lg shadow-sky-500/25">
             <Check size={32} strokeWidth={3} />
           </span>
-          <h1 className="text-[26px] font-extrabold tracking-[-0.03em] text-onb-text">
+          <h1 className="text-[26px] font-extrabold tracking-[-0.03em] text-white">
             You're live
           </h1>
-          <p className="mt-2 max-w-[38ch] text-[14.5px] leading-relaxed text-onb-muted">
+          <p className="mt-2 max-w-[38ch] text-[14.5px] leading-relaxed text-slate-400">
             {data.property.name} is on ChqIn. Put this card where guests arrive,
             then scan it with your own phone to see what they see.
           </p>
@@ -124,16 +124,16 @@ export default function LiveStep({ data, onRestart, onComplete }) {
         role="checkbox"
         aria-checked={confirmed}
         onClick={() => setConfirmed((c) => !c)}
-        className="mt-6 flex w-full items-start gap-3 rounded-2xl border border-onb-line bg-onb-surface p-4 text-left"
+        className="mt-6 flex w-full items-start gap-3 rounded-2xl border border-white/[0.08] bg-slate-900/90 p-4 text-left transition-colors"
       >
         <span
           className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-md border-2 transition-colors ${
-            confirmed ? 'border-onb-green bg-onb-green text-onb-ink' : 'border-onb-line'
+            confirmed ? 'border-sky-400 bg-sky-400 text-slate-950' : 'border-slate-700'
           }`}
         >
           {confirmed && <Check size={14} strokeWidth={3.4} />}
         </span>
-        <span className="text-[13.5px] leading-relaxed text-onb-muted">
+        <span className="text-[13.5px] leading-relaxed text-slate-400">
           I confirm I'm authorised to activate ChqIn for this property and agree
           to the terms and privacy policy.
         </span>
@@ -166,16 +166,16 @@ export default function LiveStep({ data, onRestart, onComplete }) {
 function Summary({ icon: Icon, title, lines, badge }) {
   return (
     <Card className="flex items-start gap-3.5 p-4">
-      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-onb-raised text-onb-green">
+      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-slate-800 text-sky-400">
         <Icon size={18} strokeWidth={2} />
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-3">
-          <p className="truncate text-[15px] font-bold tracking-[-0.01em] text-onb-text">{title}</p>
+          <p className="truncate text-[15px] font-bold tracking-[-0.01em] text-slate-100">{title}</p>
           {badge}
         </div>
         {lines.filter(Boolean).map((line) => (
-          <p key={line} className="truncate text-[13px] text-onb-muted">
+          <p key={line} className="truncate text-[13px] text-slate-400">
             {line}
           </p>
         ))}

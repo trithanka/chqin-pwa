@@ -49,17 +49,17 @@
   --shadow-raised: 0 10px 25px -4px rgba(37, 99, 235, 0.3), 0 4px 6px -2px rgba(37, 99, 235, 0.15);
   --shadow-float: 0 20px 48px -10px rgba(15, 23, 42, 0.14), 0 1px 3px rgba(15, 23, 42, 0.05);
 
-  /* Onboarding only */
-  --color-onb-bg: #060a08;
-  --color-onb-surface: #0d1310;
-  --color-onb-raised: #121a16;
-  --color-onb-line: #1e2a23;
-  --color-onb-text: #e8f0ea;
-  --color-onb-muted: #7c8d84;
-  --color-onb-green: #22c55e;
-  --color-onb-green-dark: #16a34a;
-  --color-onb-green-soft: #12291c;
-  --color-onb-ink: #04140a;
+  /* Onboarding / Business registration suite - aligned with brand theme */
+  --color-onb-bg: #090d16;
+  --color-onb-surface: #0f172a;
+  --color-onb-raised: #1e293b;
+  --color-onb-line: rgba(255, 255, 255, 0.08);
+  --color-onb-text: #f8fafc;
+  --color-onb-muted: #94a3b8;
+  --color-onb-green: #38bdf8;
+  --color-onb-green-dark: #0284c7;
+  --color-onb-green-soft: rgba(56, 189, 248, 0.12);
+  --color-onb-ink: #ffffff;
 }
 
 @layer base {

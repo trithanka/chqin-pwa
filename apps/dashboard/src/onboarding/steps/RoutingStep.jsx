@@ -34,9 +34,9 @@ export default function RoutingStep({ data, patch, errors }) {
 
       <Card className="p-4">
         <Field label="Reception number" hint="Fills every service below in one tap.">
-          <div className="flex items-center rounded-xl border border-slate-200 bg-white overflow-hidden focus-within:border-brand focus-within:ring-3 focus-within:ring-brand/10 transition-all">
-            <div className="flex items-center gap-1.5 px-3 py-2 bg-slate-50 border-r border-slate-200 text-slate-700 text-[13px] font-bold select-none shrink-0">
-              <MessageSquare size={14} className="text-emerald-600" />
+          <div className="flex items-center rounded-xl border border-white/[0.09] bg-slate-900/90 overflow-hidden focus-within:border-sky-400 focus-within:ring-1 focus-within:ring-sky-400/40 transition-all">
+            <div className="flex items-center gap-1.5 px-3 py-2.5 bg-slate-800 border-r border-white/[0.08] text-slate-300 text-[13px] font-bold select-none shrink-0">
+              <MessageSquare size={14} className="text-emerald-400" />
               <span>+91</span>
             </div>
             <input
@@ -47,7 +47,7 @@ export default function RoutingStep({ data, patch, errors }) {
               value={reception}
               onChange={(e) => setReception(to10Digits(e.target.value))}
               placeholder="9876543210"
-              className="h-10 w-full bg-transparent px-3 text-[14px] font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none tabular-nums"
+              className="h-11 w-full bg-transparent px-3 text-[15px] font-medium text-slate-100 placeholder:text-slate-500 focus:outline-none tabular-nums"
             />
           </div>
         </Field>
@@ -84,14 +84,14 @@ export default function RoutingStep({ data, patch, errors }) {
               error={errors[service]}
             >
               <div
-                className={`flex items-center rounded-xl border bg-white overflow-hidden transition-all ${
+                className={`flex items-center rounded-xl border overflow-hidden transition-all ${
                   invalid
-                    ? 'border-red-300 ring-3 ring-red-500/10'
-                    : 'border-slate-200 focus-within:border-brand focus-within:ring-3 focus-within:ring-brand/10'
+                    ? 'border-red-500/60 ring-1 ring-red-500/30 bg-slate-900/90'
+                    : 'border-white/[0.09] bg-slate-900/90 focus-within:border-sky-400 focus-within:ring-1 focus-within:ring-sky-400/40'
                 }`}
               >
-                <div className="flex items-center gap-1.5 px-3 py-2 bg-slate-50 border-r border-slate-200 text-slate-700 text-[13px] font-bold select-none shrink-0">
-                  <MessageSquare size={14} className="text-emerald-600" />
+                <div className="flex items-center gap-1.5 px-3 py-2.5 bg-slate-800 border-r border-white/[0.08] text-slate-300 text-[13px] font-bold select-none shrink-0">
+                  <MessageSquare size={14} className="text-emerald-400" />
                   <span>+91</span>
                 </div>
                 <input
@@ -102,7 +102,7 @@ export default function RoutingStep({ data, patch, errors }) {
                   value={val}
                   onChange={(e) => set(service, e.target.value)}
                   placeholder="9876543210"
-                  className="h-10 w-full bg-transparent px-3 text-[14px] font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none tabular-nums"
+                  className="h-11 w-full bg-transparent px-3 text-[15px] font-medium text-slate-100 placeholder:text-slate-500 focus:outline-none tabular-nums"
                 />
               </div>
             </Field>
