@@ -28,23 +28,28 @@
   --color-brand: #2563eb;
   --color-brand-dark: #1d4ed8;
   --color-brand-soft: #eff6ff;
+  --color-brand-glow: rgba(37, 99, 235, 0.15);
 
-  /* Cooler and flatter than the guest app: this is a desk tool viewed for
-     minutes at a time, not a lobby moment. */
-  --color-canvas: #f6f8fc;
-  --color-rail: #0f172a;
+  /* Modern, elevated SaaS desk canvas */
+  --color-canvas: #f8fafc;
+  --color-rail: #090d16;
+  --color-rail-subtle: #0f172a;
+
+  /* chqin-web brand gradient, for accents on the dark rail. */
+  --color-glow-light: #7ee8fa;
+  --color-glow: #38bdf8;
+  --color-glow-dark: #2563eb;
 
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
     sans-serif;
 
-  --shadow-panel: 0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 32px rgba(15, 23, 42, 0.06);
-  --shadow-raised: 0 10px 30px rgba(37, 99, 235, 0.22);
+  --shadow-panel: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -4px rgba(15, 23, 42, 0.06);
+  --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.03), 0 6px 16px -2px rgba(15, 23, 42, 0.04);
+  --shadow-card-hover: 0 4px 8px -1px rgba(15, 23, 42, 0.04), 0 16px 32px -4px rgba(15, 23, 42, 0.08);
+  --shadow-raised: 0 10px 25px -4px rgba(37, 99, 235, 0.3), 0 4px 6px -2px rgba(37, 99, 235, 0.15);
+  --shadow-float: 0 20px 48px -10px rgba(15, 23, 42, 0.14), 0 1px 3px rgba(15, 23, 42, 0.05);
 
-  /* Onboarding only.
-     Setup happens once, on a phone, standing at a reception desk — it reads
-     as an app, not as the desk tool the rest of the dashboard is. Kept under
-     its own prefix so `brand`/`slate` stay exactly what Today, Bookings and
-     Guests already expect. */
+  /* Onboarding only */
   --color-onb-bg: #060a08;
   --color-onb-surface: #0d1310;
   --color-onb-raised: #121a16;
@@ -60,18 +65,22 @@
 @layer base {
   body {
     margin: 0;
-    background: var(--color-canvas);
+    background-color: var(--color-canvas);
+    background-image: radial-gradient(at 100% 0%, rgba(37, 99, 235, 0.03) 0px, transparent 50%),
+                      radial-gradient(at 0% 100%, rgba(56, 189, 248, 0.03) 0px, transparent 50%);
+    background-attachment: fixed;
     font-family: var(--font-sans);
     color: #0f172a;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   button {
     font-family: inherit;
+    cursor: pointer;
   }
 
-  /* 16px or larger, or iOS zooms the page when a field takes focus — the one
-     thing that makes a form feel like a website on a phone. */
+  /* 16px or larger, or iOS zooms the page when a field takes focus */
   input,
   textarea,
   select {
@@ -86,12 +95,27 @@
   :focus-visible {
     outline: 2px solid var(--color-brand);
     outline-offset: 2px;
-    border-radius: 6px;
+    border-radius: 8px;
+  }
+
+  /* Sleek custom scrollbars */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.35);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(148, 163, 184, 0.55);
   }
 }
 
-/* The desk card is meant to be printed and put on the counter, so printing
-   drops everything except the card itself. */
+/* The desk card is meant to be printed and put on the counter */
 @media print {
   body {
     background: #fff;
@@ -121,8 +145,6 @@
   }
 }
 
-/* Onboarding is the one screen used on a phone held in a hand, so it is the
-   one screen that has to clear the notch and the home indicator. */
 @utility pt-safe {
   padding-top: max(var(--pt-safe-min, 0.75rem), calc(env(safe-area-inset-top) + 0.5rem));
 }
@@ -136,4 +158,13 @@
   &::-webkit-scrollbar {
     display: none;
   }
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.92); }
+}
+
+@utility animate-pulse-slow {
+  animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }

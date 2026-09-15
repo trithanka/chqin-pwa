@@ -210,6 +210,7 @@ export default function SettingsPage() {
       <PageHeader
         title="Settings"
         subtitle="Manage your property profile, room inventory, WhatsApp guest services, and on-stay amenities."
+        showBack
       />
 
       {/* Segmented Sub-Navigation Bar */}

@@ -1,26 +1,32 @@
+import { useId } from 'react'
+
 /**
- * The ChqIn mark, inline so it can take `currentColor` and animate with the
- * rest of the UI. `wordmark` is the full CIn; without it you get the C and the
- * bar, which is what survives at small sizes.
- *
- * The green never changes. The C follows whatever colour it's given.
+ * The ChqIn wordmark: "Chq" in currentColor, "In" in the brand gradient,
+ * set in Outfit 600. Drawn as SVG text so callers can keep sizing it by
+ * height (`h-7 w-auto`) like any other icon.
  */
-export default function Logo({ wordmark: _wordmark = true, className = '', ...props }) {
+export default function Logo({ className = '', ...props }) {
+  const gradient = useId()
   return (
-    <svg viewBox="0 0 258 120" fill="none" role="img" aria-label="ChqIn" className={className} {...props}>
-      <path
-        d="M91.6 33.9 A40 40 0 1 0 91.6 86.1"
-        stroke="currentColor"
-        strokeWidth="24"
-        strokeLinecap="butt"
-      />
-      <rect x="146" y="8" width="24" height="104" fill="#00E676" />
-      <path
-        d="M190 112 V70 a23 23 0 0 1 46 0 V112"
-        stroke="#00E676"
-        strokeWidth="24"
-        strokeLinecap="butt"
-      />
+    <svg viewBox="0 0 262 100" overflow="visible" role="img" aria-label="ChqIn" className={className} {...props}>
+      <defs>
+        <linearGradient id={gradient} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#7ee8fa" />
+          <stop offset="0.55" stopColor="#5cc8f5" />
+          <stop offset="1" stopColor="#3b7ff0" />
+        </linearGradient>
+      </defs>
+      <text
+        x="0"
+        y="80"
+        fontFamily="Outfit, system-ui, -apple-system, BlinkMacSystemFont, sans-serif"
+        fontWeight="600"
+        fontSize="100"
+        letterSpacing="-1"
+        fill="currentColor"
+      >
+        Chq<tspan fill={`url(#${gradient})`}>In</tspan>
+      </text>
     </svg>
   )
 }

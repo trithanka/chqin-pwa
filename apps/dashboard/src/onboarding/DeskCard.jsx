@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import { Check, Copy, Printer } from 'lucide-react'
 import { Button } from './kit'
-import Logo from '../components/Logo'
 
 // Where the guest app lives, not where the dashboard does — the printed card
 // sends a guest to check in. Hardcoding it means a card printed from staging
@@ -94,9 +93,7 @@ export default function DeskCard({ propertyName, token, onLight = false }) {
                   the code's width so error correction can still recover it. */}
               {!preview && (
                 <span className="pointer-events-none absolute inset-0 grid place-items-center">
-                  <span className="grid size-9 place-items-center rounded-lg bg-white">
-                    <Logo className="h-3.5 w-auto text-slate-900" />
-                  </span>
+                  <img src="/favicon.png" alt="" className="size-9 rounded-lg bg-white" />
                 </span>
               )}
             </>
