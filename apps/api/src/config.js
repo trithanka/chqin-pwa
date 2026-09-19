@@ -119,6 +119,17 @@ const schema = z.object({
   TRUID_KEY_ID: z.string().optional(),
   TRUID_KEY_SECRET: z.string().optional(),
   TRUID_BASE_URL: z.string().default('https://service-api.truid.one/api/v1'),
+
+  /**
+   * Shared secret for the egress proxy, when TRUID_BASE_URL points at one.
+   *
+   * TrueID whitelists callers by IP, and Render's outbound addresses are a
+   * CIDR range shared with every other service in the region. The proxy on our
+   * own VM has one fixed address they can whitelist instead — and this key is
+   * what stops anyone else who finds that hostname from spending our wallet
+   * through it. Empty when calling TrueID directly.
+   */
+  TRUID_PROXY_KEY: z.string().optional(),
 })
 
 /**

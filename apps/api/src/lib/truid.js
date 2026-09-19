@@ -17,9 +17,12 @@ import { ApiError } from './errors.js'
  * 3. The environment is chosen by the key, not the host: a TEST_ key and a
  *    live key hit the same URL. There is no separate staging hostname.
  * 4. Callers are IP-whitelisted per environment, and the allow list is keyed
- *    on the address the request actually arrives from. A host with both IPv4
- *    and IPv6 will use IPv6 by default and be refused while its whitelisted
- *    IPv4 sits unused — see the note on `agent` below.
+ *    on the address the request actually arrives from. Render's outbound
+ *    traffic leaves from a CIDR range shared across the region, so production
+ *    points TRUID_BASE_URL at our own proxy, which has one fixed address they
+ *    can whitelist. Locally, note that a host with both IPv4 and IPv6 uses
+ *    IPv6 by default and is refused while its whitelisted IPv4 sits unused —
+ *    run with `node --dns-result-order=ipv4first`.
  * 5. **A failed verification is an HTTP 200 with `"status": true`.** The only
  *    thing separating a pass from a refusal is `data.verified`. Reading the
  *    HTTP code, or the top-level `status` field, passes every guest. This is
@@ -78,6 +81,9 @@ async function call(path, body) {
       'Content-Type': 'application/json',
       'X-Request-Id': id,
       'X-Timestamp': String(Math.floor(Date.now() / 1000)),
+      // Only set when TRUID_BASE_URL points at our own egress proxy, which
+      // refuses anything without it. TrueID itself ignores the header.
+      ...(config.TRUID_PROXY_KEY ? { 'X-Proxy-Key': config.TRUID_PROXY_KEY } : {}),
     },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
