@@ -150,6 +150,8 @@ export async function verifyAadhaarOtp(session, { requestId, otp, consent }) {
       subjectName: subject.name,
       subjectDob: subject.dateOfBirth,
       subjectGender: subject.gender,
+      subjectAddress: subject.address ?? null,
+      subjectCareOf: subject.careOf ?? null,
       consent: {
         accepted: true,
         version: consent.version ?? 'v1',
@@ -165,15 +167,21 @@ export async function verifyAadhaarOtp(session, { requestId, otp, consent }) {
 /**
  * UIDAI's answer, in this application's shape.
  *
- * The photo, address and care-of details TrueID also returns are
- * dropped here rather than stored: a guest register needs a name, a date of
- * birth and a gender, and everything beyond that is a liability with no reader.
+ * The photo is still dropped — nothing reads it. The address and care-of are
+ * kept, because a hotel register asks for them by law and the dashboard shows
+ * them; storing PII with no reader is the liability, storing what the register
+ * requires is the job.
  */
 function holderFrom(data, last4) {
   const subject = {
     name: data.name?.trim() || null,
     dateOfBirth: isoDate(data.date_of_birth),
     gender: normalizeGender(data.gender),
+    // Whatever parts UIDAI holds, unflattened. Null rather than {} when the
+    // record carries none, so "never returned" and "returned empty" stay
+    // distinguishable in the column.
+    address: data.address && Object.keys(data.address).length ? data.address : null,
+    careOf: data.care_of?.trim() || null,
     maskedAadhaar: `XXXX XXXX ${last4}`,
     simulated: false,
   }
@@ -241,6 +249,8 @@ function simulatedHolder(last4, session) {
     name: session.bookingGuestName ?? 'Verified Guest',
     dateOfBirth: '1994-03-12',
     gender: 'undisclosed',
+    address: null,
+    careOf: null,
     maskedAadhaar: `XXXX XXXX ${last4}`,
     simulated: true,
   }
@@ -253,6 +263,8 @@ export async function verifiedSubject(sessionId) {
       name: identityVerifications.subjectName,
       dateOfBirth: identityVerifications.subjectDob,
       gender: identityVerifications.subjectGender,
+      address: identityVerifications.subjectAddress,
+      careOf: identityVerifications.subjectCareOf,
     })
     .from(identityVerifications)
     .where(

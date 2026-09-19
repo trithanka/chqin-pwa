@@ -177,6 +177,11 @@ export async function verifyOkycOtp(sessionId, otp) {
     // TrueID returns DD-MM-YYYY; isoDate() in identity.js already reads that.
     date_of_birth: data.dob,
     gender: data.gender,
+    // UIDAI's address is a bag of optional parts, and which ones are present
+    // differs between records — passed through whole rather than flattened,
+    // because a register wants them in separate fields.
+    address: data.address ?? null,
+    care_of: data.care_of ?? null,
   }
 }
 

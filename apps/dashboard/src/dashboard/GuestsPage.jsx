@@ -225,8 +225,24 @@ export function GuestDetailPage() {
             <DetailRow label="Gender">
               <span className="capitalize">{guest.gender ?? 'Not recorded'}</span>
             </DetailRow>
+            {guest.careOf && <DetailRow label="Care of">{guest.careOf}</DetailRow>}
+            {guest.maskedAadhaar && (
+              <DetailRow label="Aadhaar">
+                <span className="tabular-nums">{guest.maskedAadhaar}</span>
+              </DetailRow>
+            )}
             <DetailRow label="Identity Verified On">
               {guest.identityCheckedAt ? date(guest.identityCheckedAt) : 'At first check-in'}
+            </DetailRow>
+            <DetailRow label="Registered Address">
+              {guest.address ? (
+                <address className="not-italic leading-relaxed whitespace-pre-line">{formatAddress(guest.address)}</address>
+              ) : (
+                // Verified before addresses were stored: the check happened,
+                // the address was not kept. Say that rather than implying the
+                // guest never gave one.
+                <span className="text-slate-400">Not recorded</span>
+              )}
             </DetailRow>
           </div>
 
@@ -317,3 +333,42 @@ export function GuestDetailPage() {
   )
 }
 
+/**
+ * UIDAI's address as a register would write it.
+ *
+ * The parts are all optional and which ones exist differs between records, so
+ * this drops the empties and joins what is left rather than assuming a shape.
+ * Ordered house → street → landmark → locality → post → district → state →
+ * pincode, which is how an Indian address is read aloud.
+ */
+function formatAddress(address) {
+  // UIDAI repeats the same place across several parts — vtc, subdist and
+  // district are frequently all "Chennai", and `post` often echoes `locality`
+  // in different case. A register reading "Chennai, Chennai, Chennai" looks
+  // broken, so each value is used once, first occurrence winning.
+  const used = new Set()
+  const take = (...keys) =>
+    keys
+      .map((k) => address[k]?.trim())
+      .filter((v) => {
+        if (!v) return false
+        const key = v.toLowerCase()
+        if (used.has(key)) return false
+        used.add(key)
+        return true
+      })
+      .join(', ')
+
+  // Ordered the way an Indian address is read aloud.
+  return [
+    take('house', 'street'),
+    take('landmark'),
+    take('locality', 'vtc'),
+    take('post'),
+    take('district', 'subdist'),
+    [take('state'), address.pincode?.trim()].filter(Boolean).join(' - '),
+    take('country'),
+  ]
+    .filter(Boolean)
+    .join('\n')
+}

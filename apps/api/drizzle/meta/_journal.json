@@ -85,6 +85,13 @@
       "when": 1787000000002,
       "tag": "0011_staff_sessions_and_mail",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1787000000003,
+      "tag": "0012_identity_address",
+      "breakpoints": true
     }
   ]
 }

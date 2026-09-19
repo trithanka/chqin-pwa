@@ -380,18 +380,38 @@ export async function getGuest(venueId, id) {
     .where(eq(credentials.guestId, id))
     .orderBy(desc(credentials.createdAt))
 
+  // The address and care-of come from the check rather than the guest row:
+  // they are what UIDAI vouched for at a point in time, and the register wants
+  // that, not something edited since. Newest first — a guest who verifies
+  // again after moving should show the address they gave most recently.
   const [verification] = await db
-    .select({ verifiedAt: identityVerifications.verifiedAt })
+    .select({
+      verifiedAt: identityVerifications.verifiedAt,
+      address: identityVerifications.subjectAddress,
+      careOf: identityVerifications.subjectCareOf,
+      documentLast4: identityVerifications.documentLast4,
+    })
     .from(identityVerifications)
     .where(and(eq(identityVerifications.guestId, id), eq(identityVerifications.result, 'passed')))
-    .orderBy(identityVerifications.createdAt)
+    .orderBy(desc(identityVerifications.createdAt))
     .limit(1)
 
   const stays = await bookingsQuery(venueId).where(
     and(eq(bookings.venueId, venueId), eq(bookings.guestId, id)),
   )
 
-  return { ...guest, devices, identityCheckedAt: verification?.verifiedAt ?? null, stays }
+  return {
+    ...guest,
+    devices,
+    identityCheckedAt: verification?.verifiedAt ?? null,
+    // Null for guests verified before these were stored — the check happened,
+    // the address just was not kept. The screen says so rather than implying
+    // the guest never gave one.
+    address: verification?.address ?? null,
+    careOf: verification?.careOf ?? null,
+    maskedAadhaar: verification?.documentLast4 ? `XXXX XXXX ${verification.documentLast4}` : null,
+    stays,
+  }
 }
 
 /* ------------------------------------------------------------------ */

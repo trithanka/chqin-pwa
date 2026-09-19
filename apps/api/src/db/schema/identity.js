@@ -116,6 +116,16 @@ export const identityVerifications = pgTable(
     subjectName: text('subject_name'),
     subjectDob: date('subject_dob'),
     subjectGender: text('subject_gender'),
+    // The registered address, as UIDAI holds it. A hotel register asks for
+    // this by law, and Form C needs it for foreign nationals — so unlike the
+    // photo, it has a reader. JSONB because UIDAI's shape is a bag of
+    // optional parts (house, street, landmark, vtc, subdist...) that differs
+    // between records; flattening it to one string loses what the register
+    // wants in separate fields.
+    subjectAddress: jsonb('subject_address'),
+    // "S/O RAMASAMY KUMAR". Part of how a person is identified on an Indian
+    // register, and meaningless to reconstruct later if dropped now.
+    subjectCareOf: text('subject_care_of'),
     // Agreeing to an identity check is something you must be able to prove
     // happened: which text, and when.
     consent: jsonb('consent'),
