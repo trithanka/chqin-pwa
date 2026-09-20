@@ -10,7 +10,7 @@ import { stayFrom } from '../services/stay.js'
 export const checkin = new Hono()
 
 checkin.post('/', body(checkinRequest), async (c) => {
-  const { sessionId, idempotencyKey, stay } = c.get('body')
+  const { sessionId, idempotencyKey, stay, noPasskeyReason } = c.get('body')
 
   const open = await loadOpen(sessionId)
   const session = open ?? (await loadAny(sessionId))
@@ -42,6 +42,10 @@ checkin.post('/', body(checkinRequest), async (c) => {
     sessionId: session.id,
     event: 'checkin',
     outcome: 'ok',
+    // The reason a guest finished without enrolling — a WebAuthn error name,
+    // or that the device reported no authenticator at all. This is the only
+    // place that number can be counted; the guest's phone keeps no log.
+    detail: noPasskeyReason ? { noPasskeyReason } : {},
   })
 
   return c.json(result)

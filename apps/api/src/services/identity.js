@@ -1,8 +1,10 @@
 import { and, desc, eq, isNull } from 'drizzle-orm'
-import { db } from '../db/client.js'
-import { identityVerifications } from '../db/schema/index.js'
+import { db, transaction } from '../db/client.js'
+import { bookings, guests, identityVerifications } from '../db/schema/index.js'
 import { lookupHash } from '../lib/crypto.js'
+import { uuidv7 } from '../lib/ids.js'
 import { ApiError, notFound } from '../lib/errors.js'
+import { bindGuest } from './sessions.js'
 import { PROVIDER, generateOkycOtp, liveAadhaar, verifyOkycOtp } from '../lib/truid.js'
 
 /**
@@ -161,7 +163,58 @@ export async function verifyAadhaarOtp(session, { requestId, otp, consent }) {
     })
     .where(eq(identityVerifications.id, requestId))
 
+  // The guest exists from here, not from the passkey. See ensureSessionGuest.
+  await ensureSessionGuest(session, subject)
+
   return { verificationId: requestId, subject }
+}
+
+/**
+ * Give the session a guest as soon as the identity check passes.
+ *
+ * Enrolment used to be what created the guest row, which quietly made a
+ * passkey mandatory: a phone that couldn't enrol — an in-app browser, a
+ * dismissed sheet, a device with no platform authenticator — had already cost
+ * a billed UIDAI call, and the only way on was a rescan that billed another.
+ * The identity check is what a hotel register is actually made of; the passkey
+ * is how a returning guest skips it next time. So the order is now: verified
+ * means checkable-in, enrolled means recognised.
+ */
+export async function ensureSessionGuest(session, subject) {
+  if (session.guestId) return session.guestId
+
+  return transaction(async (tx) => {
+    const [guest] = await tx
+      .insert(guests)
+      .values({
+        id: uuidv7(),
+        displayName: subject?.name ?? session.bookingGuestName ?? 'Guest',
+        dateOfBirth: subject?.dateOfBirth ?? null,
+        gender: subject?.gender ?? null,
+        emailHmac: lookupHash(null),
+      })
+      .returning({ id: guests.id })
+
+    if (session.bookingId) {
+      await tx
+        .update(bookings)
+        .set({ guestId: guest.id })
+        .where(and(eq(bookings.id, session.bookingId), isNull(bookings.guestId)))
+    }
+
+    // The check was recorded against the session, before anyone existed to
+    // record it against. Attach it, or the proof an ID was seen points at
+    // nobody — which is the one record a regulator asks for.
+    await tx
+      .update(identityVerifications)
+      .set({ guestId: guest.id })
+      .where(
+        and(eq(identityVerifications.sessionId, session.id), isNull(identityVerifications.guestId)),
+      )
+
+    await bindGuest(tx, session.id, guest.id)
+    return guest.id
+  })
 }
 
 /**

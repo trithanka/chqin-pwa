@@ -153,6 +153,12 @@ export const checkinRequest = z.object({
   /** Same key on a retry must not produce a second check-in. */
   idempotencyKey: z.string().min(8).max(64),
   stay: stayDeclaration.optional(),
+  /**
+   * Why this check-in carries no passkey. A null credential otherwise
+   * conflates a failed enrolment with a guest who tapped past it, and the
+   * failure rate is only visible on the guest's own phone — which is nowhere.
+   */
+  noPasskeyReason: z.string().max(200).optional(),
 })
 
 export const checkinResponse = z.object({

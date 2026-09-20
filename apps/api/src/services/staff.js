@@ -185,6 +185,10 @@ const bookingRow = {
   roomsCount: bookings.roomsCount,
   checkedInAt: checkins.checkedInAt,
   journey: checkins.journey,
+  // Whether a passkey signed this check-in. Identity is what a check-in now
+  // rests on, so one can be finished on a phone that never enrolled — and the
+  // desk must not be told "Passkey Verified" about a guest who has none.
+  passkey: sql`${checkins.credentialId} IS NOT NULL`,
   // The check-in behind the reservation, when there is one. Room changes are
   // addressed by check-in, so a row without this can't be moved from Today.
   checkinId: checkins.id,

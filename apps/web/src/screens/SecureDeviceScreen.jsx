@@ -11,13 +11,22 @@ import { isCancellation, passkeyMode, unsupportedReason } from '../passkey'
  * and the server verifies it — so reaching the next screen means a check-in
  * actually exists, not that an animation finished.
  */
-export default function SecureDeviceScreen({ next, activeMode, runEnrolment, direction }) {
+export default function SecureDeviceScreen({
+  next,
+  activeMode,
+  runEnrolment,
+  finishWithoutPasskey,
+  direction,
+}) {
   const [mode, setMode] = useState(null) // null while probing
   const [state, setState] = useState('idle') // 'idle' | 'working' | 'done'
   const [note, setNote] = useState(null)
   // Separate from `note`: a dismissed unlock is a nudge, an expired session is
   // a dead end, and they must not look alike.
   const [expired, setExpired] = useState(false)
+  // Why enrolment didn't happen, kept for the check-in that skips it. The
+  // guest is told something kind; the audit row gets the WebAuthn error name.
+  const failure = useRef(null)
   // The OS sheet can resolve twice on some platforms; a second enrolment would
   // mint a second credential for one device.
   const running = useRef(false)
@@ -28,6 +37,12 @@ export default function SecureDeviceScreen({ next, activeMode, runEnrolment, dir
       if (m === 'simulated') setNote(unsupportedReason())
     })
   }, [])
+
+  // The probe is a hint, not a verdict: iOS web views and some Android
+  // browsers answer "no platform authenticator" on phones that have one. A
+  // disabled button turns that wrong answer into a dead end, so the tap stays
+  // live and a real failure gets to say what it actually was.
+  const unsupported = mode === 'simulated'
 
   const enrol = async () => {
     if (state !== 'idle' || running.current) return
@@ -46,13 +61,13 @@ export default function SecureDeviceScreen({ next, activeMode, runEnrolment, dir
       // the same dead session. Say so as a failure rather than as the grey
       // hint the other notes use, because the only way forward is a rescan.
       setExpired(err.code === 'unknown_session')
-      // ponytail: diagnostic tail. NotAllowedError is WebAuthn's catch-all —
-      // a real dismissal, a lost user gesture and the 60s ceremony timeout all
-      // arrive as the same name, and only the elapsed time tells them apart.
-      // Drop the tail once the cause on real devices is known.
+      // NotAllowedError is WebAuthn's catch-all: a real dismissal, a lost user
+      // gesture and the 60s ceremony timeout all arrive under that one name,
+      // and only the elapsed time tells them apart. Neither belongs on screen.
+      failure.current = `${err.name ?? err.code ?? 'error'} ${Date.now() - startedAt}ms`
       setNote(
         isCancellation(err)
-          ? `Face ID didn’t complete. Tap to try again. [${err.name} ${Date.now() - startedAt}ms]`
+          ? 'Face ID didn’t complete. Tap to try again.'
           : (err.message ?? 'That didn’t work. Try again.'),
       )
     } finally {
@@ -60,7 +75,31 @@ export default function SecureDeviceScreen({ next, activeMode, runEnrolment, dir
     }
   }
 
-  const blocked = mode === 'simulated'
+  /**
+   * The way out. Enrolment can fail for reasons the guest cannot fix from the
+   * lobby, and by this screen the identity check has already passed and
+   * already been billed — so the check-in completes without a passkey rather
+   * than dying here and charging for a second one on the rescan. The cost is
+   * that this device isn't recognised next time, which is one Aadhaar check
+   * later, not one now.
+   */
+  const skip = async () => {
+    if (state !== 'idle' || running.current) return
+    running.current = true
+    setState('working')
+    setNote(null)
+    try {
+      await finishWithoutPasskey(failure.current ?? (unsupported ? `unsupported: ${note}` : 'skipped'))
+      setState('done')
+      setTimeout(next, 500)
+    } catch (err) {
+      setState('idle')
+      setExpired(err.code === 'unknown_session')
+      setNote(err.message ?? 'That didn’t work. Try again.')
+    } finally {
+      running.current = false
+    }
+  }
 
   return (
     <Screen direction={direction} className="justify-between pt-7 pb-8 px-7">
@@ -103,18 +142,20 @@ export default function SecureDeviceScreen({ next, activeMode, runEnrolment, dir
         <PrimaryButton
           onClick={enrol}
           loading={state === 'working' || mode === null}
-          disabled={blocked}
           icon={state === 'done' ? undefined : KeyRound}
           tone={state === 'done' ? 'success' : 'brand'}
         >
           {state === 'done' ? 'Passkey created' : 'Create passkey'}
         </PrimaryButton>
 
-        {blocked && (
-          <p className="mt-3 text-center text-[12px] leading-relaxed text-slate-400">
-            Check-in needs a passkey, so the desk will have to finish this one
-            by hand.
-          </p>
+        {(unsupported || note) && state !== 'done' && !expired && (
+          <button
+            type="button"
+            onClick={skip}
+            className="mt-4 w-full text-center text-[13px] font-semibold text-slate-500 underline underline-offset-4"
+          >
+            Continue without a passkey
+          </button>
         )}
       </div>
     </Screen>

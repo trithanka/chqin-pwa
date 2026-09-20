@@ -214,6 +214,24 @@ export default function App() {
     setCheckin(result)
   }, [session])
 
+  /**
+   * Finish without enrolling. The identity check already said who this is and
+   * already cost a UIDAI call — a phone that can't make a passkey shouldn't
+   * send the guest back to the start to pay for another one.
+   */
+  const finishWithoutPasskey = useCallback(
+    async (reason) => {
+      const result = await completeCheckin(
+        session.sessionId,
+        session.idempotencyKey,
+        session.stay,
+        reason,
+      )
+      setCheckin(result)
+    },
+    [session],
+  )
+
   /** Prove an existing passkey, then finish. */
   const runAuthentication = useCallback(async () => {
     await authenticate(session.sessionId)
@@ -254,6 +272,7 @@ export default function App() {
     verifyOtp,
     recordCapture,
     runEnrolment,
+    finishWithoutPasskey,
     runAuthentication,
     fallBackToNewDevice,
   }

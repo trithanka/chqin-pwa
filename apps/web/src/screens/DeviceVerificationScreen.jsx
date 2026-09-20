@@ -60,8 +60,6 @@ export default function DeviceVerificationScreen({
     }
   }
 
-  const blocked = mode === 'simulated'
-
   return (
     <Screen direction={direction} className="justify-between pt-7 pb-8 px-7">
       <div>
@@ -126,7 +124,6 @@ export default function DeviceVerificationScreen({
         <PrimaryButton
           onClick={verify}
           loading={state === 'verifying' || mode === null}
-          disabled={blocked}
           icon={state === 'idle' ? Fingerprint : undefined}
           tone={state === 'verified' ? 'success' : 'brand'}
         >

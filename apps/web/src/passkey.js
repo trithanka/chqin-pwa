@@ -37,11 +37,31 @@ export async function passkeyMode() {
   }
 }
 
+/**
+ * An in-app browser — the web view inside WhatsApp, Instagram, Gmail and the
+ * rest. It reports no platform authenticator whatever the phone can do, so a
+ * guest sent the link in a chat looks like a guest on a passkey-less device.
+ * The way out is Safari, not Settings, and the two need different sentences.
+ *
+ * iOS web views run Safari's engine without Safari's UA token, which is what
+ * the second test reads.
+ */
+export function inAppBrowser() {
+  const ua = navigator.userAgent
+  if (/FBAN|FBAV|Instagram|LinkedInApp|Line\/|MicroMessenger|Snapchat|Twitter/i.test(ua)) return true
+  return /iPhone|iPad/.test(ua) && /AppleWebKit/.test(ua) && !/Safari|CriOS|FxiOS|EdgiOS/.test(ua)
+}
+
 export function unsupportedReason() {
   if (typeof window === 'undefined') return 'No browser environment.'
   if (!window.isSecureContext) return 'Passkeys need https:// or localhost.'
   if (!window.PublicKeyCredential) return 'This browser has no passkey support.'
-  return 'This device has no built-in unlock (Face ID, Touch ID or fingerprint).'
+  if (inAppBrowser()) {
+    return 'Open this page in Safari — an in-app browser can’t create a passkey.'
+  }
+  // The probe also answers false with no passcode, with iCloud Passwords off
+  // and in a Private tab, and those are the ones a guest can actually fix.
+  return 'No built-in unlock available. Check Face ID and iCloud Passwords are on, and that this isn’t a Private tab.'
 }
 
 /** True when the guest dismissed the OS sheet rather than something breaking. */

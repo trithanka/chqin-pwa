@@ -312,7 +312,8 @@ export function BookingDetailPage() {
                 <DetailRow label="Method">{journeyOf(booking.journey)?.label ?? 'Self Check-in'}</DetailRow>
                 <DetailRow label="Verification">
                   <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold text-[13px]">
-                    <CheckCircle2 size={14} /> Passkey Verified
+                    <CheckCircle2 size={14} />
+                    {booking.passkey ? 'Passkey Verified' : 'Aadhaar Verified — no passkey'}
                   </span>
                 </DetailRow>
               </div>

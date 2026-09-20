@@ -62,11 +62,15 @@ async function consumeChallenge(tx, challengeId, purpose, sessionId) {
  * the challenge and becomes a row only when registration verifies.
  */
 async function resolveUserHandle(tx, session) {
-  if (session.bookingGuestId) {
+  // The session's own guest first: the identity check now creates one, and
+  // enrolling against a fresh handle instead would leave the same person with
+  // two rows and the credential on the wrong one.
+  const known = session.guestId ?? session.bookingGuestId
+  if (known) {
     const [guest] = await tx
       .select({ id: guests.id, displayName: guests.displayName })
       .from(guests)
-      .where(eq(guests.id, session.bookingGuestId))
+      .where(eq(guests.id, known))
       .limit(1)
     if (guest) return { guestId: guest.id, handle: guest.id, name: guest.displayName }
   }

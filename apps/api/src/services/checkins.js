@@ -30,7 +30,9 @@ export async function findByIdempotencyKey(key) {
 
 export async function checkIn(session, idempotencyKey, stay) {
   if (!session.guestId) {
-    throw unauthorized('not_authenticated', 'Verify with your passkey first.')
+    // Identity, not the passkey: a verified guest can check in from a phone
+    // that could never enrol one.
+    throw unauthorized('not_authenticated', 'Complete the identity check first.')
   }
   // What the server decided at detection, not what the rows look like now:
   // enrolment sets bookings.guestId, so a first-time guest would otherwise

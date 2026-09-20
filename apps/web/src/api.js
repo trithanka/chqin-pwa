@@ -52,8 +52,13 @@ export const api = {
   authenticationOptions: (sessionId, knownCredentialIds) =>
     request('/webauthn/authentication/options', { sessionId, knownCredentialIds }),
   authenticationVerify: (payload) => request('/webauthn/authentication/verify', payload),
-  checkin: (sessionId, idempotencyKey, stay) =>
-    request('/checkin', { sessionId, idempotencyKey, ...(stay ? { stay } : {}) }),
+  checkin: (sessionId, idempotencyKey, stay, noPasskeyReason) =>
+    request('/checkin', {
+      sessionId,
+      idempotencyKey,
+      ...(stay ? { stay } : {}),
+      ...(noPasskeyReason ? { noPasskeyReason } : {}),
+    }),
 }
 
 export const apiConfigured = Boolean(import.meta.env.VITE_API_URL)

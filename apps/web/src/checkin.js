@@ -77,8 +77,8 @@ export async function authenticate(sessionId) {
   return api.authenticationVerify({ sessionId, challengeId, credential })
 }
 
-export const completeCheckin = (sessionId, idempotencyKey, stay) =>
-  api.checkin(sessionId, idempotencyKey, stay)
+export const completeCheckin = (sessionId, idempotencyKey, stay, noPasskeyReason) =>
+  api.checkin(sessionId, idempotencyKey, stay, noPasskeyReason)
 
 /**
  * A QR scanned by the phone's own camera app opens a link rather than landing
