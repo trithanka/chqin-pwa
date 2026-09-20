@@ -34,6 +34,8 @@ const LEGAL_NAME_LABELS = byLength([
   'legal name',
 ])
 const TRADE_NAME_LABELS = byLength(['trade name, if any', 'trade name if any', 'trade name'])
+const CONSTITUTION_LABELS = byLength(['constitution of business', 'constitution'])
+const REGISTRATION_TYPE_LABELS = byLength(['type of registration'])
 
 const clean = (value) =>
   value
@@ -50,7 +52,7 @@ const looksLikeName = (value) =>
   value.length <= 120 &&
   !GSTIN.test(value) &&
   /[A-Za-z]{3}/.test(value) &&
-  !/^(registration|certificate|trade name|legal name|address|constitution|date|type)\b/i.test(value)
+  !/^(registration|certificate|trade name|legal name|address|constitution|date|type|additional)\b/i.test(value)
 
 /**
  * Certificates number their fields — "2. Legal Name" — and the numbering is
@@ -86,6 +88,59 @@ function valueAfter(lines, labels) {
 }
 
 /**
+ * A GSTIN carries the registrant's PAN in characters 3-12, so a certificate
+ * never has to state the PAN separately and this never has to be typed.
+ */
+export const panOf = (gstin) => {
+  const pan = gstin?.slice(2, 12) ?? ''
+  return /^[A-Z]{5}\d{4}[A-Z]$/.test(pan) ? pan : null
+}
+
+/**
+ * A `Label: value` pair, found anywhere in the text rather than at the start
+ * of a line: the address block's labels share their line with the wrapped
+ * "Address of Principal Place of Business" heading that introduces them.
+ */
+function labelled(text, label) {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  // The certificate abbreviates with a full stop — "Floor No.:" — so the stop
+  // is part of the punctuation between label and value, not part of the label.
+  const found = text.match(new RegExp(`${escaped}\\.?\\s*:\\s*([^\\n]*)`, 'i'))
+  const value = found ? clean(found[1]) : ''
+  return value || null
+}
+
+/**
+ * The principal place of business, as REG-06 breaks it up.
+ *
+ * The street line is the parts a courier would need, in the order they'd be
+ * written; city, state and PIN stay separate because the form keeps them
+ * separate.
+ */
+function parseAddress(text) {
+  const part = (label) => labelled(text, label)
+
+  const street = [
+    part('Floor No'),
+    part('Building No./Flat No'),
+    part('Name Of Premises/Building'),
+    part('Road/Street'),
+    part('Nearby Landmark'),
+    part('Locality/Sub Locality'),
+  ]
+    .filter(Boolean)
+    .join(', ')
+
+  return {
+    street: street || null,
+    city: part('City/Town/Village'),
+    district: part('District'),
+    state: part('State'),
+    pincode: part('PIN Code'),
+  }
+}
+
+/**
  * What a certificate's text says. Every field is optional — a partial read
  * fills what it found and leaves the rest to be typed.
  */
@@ -95,10 +150,16 @@ export function parseGstText(text) {
     .map(clean)
     .filter(Boolean)
 
+  const gstin = text.match(GSTIN)?.[0] ?? null
+
   return {
-    gstin: text.match(GSTIN)?.[0] ?? null,
+    gstin,
+    pan: panOf(gstin),
     legalName: valueAfter(lines, LEGAL_NAME_LABELS),
     tradeName: valueAfter(lines, TRADE_NAME_LABELS),
+    constitution: valueAfter(lines, CONSTITUTION_LABELS),
+    registrationType: valueAfter(lines, REGISTRATION_TYPE_LABELS),
+    address: parseAddress(text),
   }
 }
 

@@ -38,7 +38,20 @@ const STEPS = [
 const BLANK = {
   account: { name: '', email: '', password: '', confirmPassword: '', role: 'owner' },
   property: { name: '', city: '', address: '', country: 'IN', timezone: 'Asia/Kolkata' },
-  business: { legalName: '', gstin: '' },
+  // Everything on the GST certificate that identifies the business. All of it
+  // is read off the attached PDF; the PAN is carried inside the GSTIN itself.
+  business: {
+    legalName: '',
+    tradeName: '',
+    gstin: '',
+    pan: '',
+    constitution: '',
+    registrationType: '',
+    address: '',
+    city: '',
+    state: '',
+    pincode: '',
+  },
   rooms: [],
   services: ['food', 'water', 'housekeeping', 'laundry', 'maintenance'],
   essentials: {
@@ -432,6 +445,11 @@ function validate(stepKey, data) {
     const gstin = data.business.gstin.trim()
     if (gstin && !/^[0-9A-Z]{15}$/.test(gstin.toUpperCase())) {
       errors.gstin = 'A GSTIN is 15 characters, like 18ABCDE1234F1Z5.'
+    }
+
+    const pan = data.business.pan.trim().toUpperCase()
+    if (pan && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)) {
+      errors.pan = 'A PAN is 10 characters, like ABCDE1234F.'
     }
   }
 

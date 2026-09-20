@@ -88,13 +88,24 @@ const registerRequest = z.object({
     .array(z.object({ number: z.string().min(1).max(16), type: z.string().max(40).optional() }))
     .max(500)
     .default([]),
-  // The registration a hotel is legally operating under. Typed by the owner;
-  // the document upload behind it isn't read yet, so nothing here is claimed
-  // to be verified.
+  // The registration a hotel is legally operating under. Read off the GST
+  // certificate in the browser and editable afterwards; nothing here has been
+  // checked against the GST registry, so nothing is claimed to be verified.
   business: z
     .object({
       legalName: z.string().max(160).optional(),
+      tradeName: z.string().max(160).optional(),
       gstin: z.string().max(20).optional(),
+      // Characters 3-12 of the GSTIN, kept on its own because a business
+      // without a GST registration still has a PAN.
+      pan: z.string().max(10).optional(),
+      constitution: z.string().max(80).optional(),
+      registrationType: z.string().max(40).optional(),
+      // The registered address, which is not always where guests check in.
+      address: z.string().max(240).optional(),
+      city: z.string().max(80).optional(),
+      state: z.string().max(80).optional(),
+      pincode: z.string().max(10).optional(),
     })
     .default({}),
   ...settingsShape,

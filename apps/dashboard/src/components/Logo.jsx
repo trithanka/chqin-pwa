@@ -10,7 +10,7 @@ export default function Logo({ className = '', ...props }) {
   // doesn't paint, so a shared id breaks when the first Logo is hidden.
   const gradient = useId()
   return (
-    <svg viewBox="0 0 262 100" overflow="visible" role="img" aria-label="ChqIn" className={className} {...props}>
+    <svg viewBox="0 0 300 100" overflow="visible" role="img" aria-label="ChqIn" className={className} {...props}>
       <defs>
         <linearGradient id={gradient} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#7ee8fa" />
@@ -28,6 +28,7 @@ export default function Logo({ className = '', ...props }) {
         fill="currentColor"
       >
         Chq<tspan fill={`url(#${gradient})`}>In</tspan>
+        <tspan fontSize="28" dy="-38" letterSpacing="0">™</tspan>
       </text>
     </svg>
   )
