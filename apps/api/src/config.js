@@ -74,7 +74,19 @@ const schema = z.object({
   COOKIE_SAMESITE: z.enum(['Lax', 'Strict', 'None']).default('Lax'),
 
   CHALLENGE_TTL_MS: z.coerce.number().default(120_000),
-  SESSION_TTL_MS: z.coerce.number().default(300_000),
+
+  /**
+   * How long a scanned desk QR's session stays usable.
+   *
+   * This has to outlast the whole journey, not one screen: stay details, the
+   * Aadhaar number, waiting for UIDAI's SMS, typing the code, then enrolling a
+   * passkey. It was five minutes — the same as the OTP's own validity — so a
+   * guest who received a code could reach the passkey step holding a valid OTP
+   * and a dead session, and the failure landed on the last screen with no way
+   * back. Thirty minutes covers a slow arrival at a busy desk; the session is
+   * still per-scan and single-guest, so a long one grants nothing extra.
+   */
+  SESSION_TTL_MS: z.coerce.number().default(30 * 60_000),
 
   /**
    * Identifies this deployment to Nominatim, whose usage policy asks for a way

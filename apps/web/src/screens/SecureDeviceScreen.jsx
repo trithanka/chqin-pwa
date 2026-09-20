@@ -15,6 +15,9 @@ export default function SecureDeviceScreen({ next, activeMode, runEnrolment, dir
   const [mode, setMode] = useState(null) // null while probing
   const [state, setState] = useState('idle') // 'idle' | 'working' | 'done'
   const [note, setNote] = useState(null)
+  // Separate from `note`: a dismissed unlock is a nudge, an expired session is
+  // a dead end, and they must not look alike.
+  const [expired, setExpired] = useState(false)
   // The OS sheet can resolve twice on some platforms; a second enrolment would
   // mint a second credential for one device.
   const running = useRef(false)
@@ -31,6 +34,7 @@ export default function SecureDeviceScreen({ next, activeMode, runEnrolment, dir
     running.current = true
     setState('working')
     setNote(null)
+    const startedAt = Date.now()
 
     try {
       await runEnrolment()
@@ -38,9 +42,17 @@ export default function SecureDeviceScreen({ next, activeMode, runEnrolment, dir
       setTimeout(next, 500)
     } catch (err) {
       setState('idle')
+      // An expired session cannot be retried from here — tapping again calls
+      // the same dead session. Say so as a failure rather than as the grey
+      // hint the other notes use, because the only way forward is a rescan.
+      setExpired(err.code === 'unknown_session')
+      // ponytail: diagnostic tail. NotAllowedError is WebAuthn's catch-all —
+      // a real dismissal, a lost user gesture and the 60s ceremony timeout all
+      // arrive as the same name, and only the elapsed time tells them apart.
+      // Drop the tail once the cause on real devices is known.
       setNote(
         isCancellation(err)
-          ? 'Unlock was dismissed. Tap to try again.'
+          ? `Face ID didn’t complete. Tap to try again. [${err.name} ${Date.now() - startedAt}ms]`
           : (err.message ?? 'That didn’t work. Try again.'),
       )
     } finally {
@@ -65,11 +77,24 @@ export default function SecureDeviceScreen({ next, activeMode, runEnrolment, dir
           />
         </div>
 
-        <div className="h-10 text-center">
+        <div className="min-h-10 text-center">
           {note && (
-            <p className="mx-auto max-w-[290px] text-[12.5px] leading-relaxed font-medium text-slate-400">
-              {note}
+            <p
+              className={`mx-auto max-w-[290px] text-[12.5px] leading-relaxed font-medium ${
+                expired ? 'text-red-600' : 'text-slate-400'
+              }`}
+            >
+              {expired ? 'This check-in timed out. Scan the desk code again to start over.' : note}
             </p>
+          )}
+          {expired && (
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-3 rounded-full bg-slate-900 px-5 py-2 text-[13px] font-semibold text-white"
+            >
+              Start over
+            </button>
           )}
         </div>
       </div>

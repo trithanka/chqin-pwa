@@ -54,9 +54,12 @@ export default function DeskCard({ propertyName, token, onLight = false }) {
   }, [url])
 
   // The card is the same on both; only the chrome around it changes.
-  const light = onLight
-    ? 'border-slate-200 bg-white text-slate-800 hover:border-slate-300'
-    : ''
+  //
+  // The buttons sit outside the card, on the page. On the dark onboarding
+  // background a white button reads clearly; on the Code page it was white on
+  // near-white and only became visible on hover, when the tone added a border
+  // and a tint. A filled grey button is the one that shows up on both.
+  const buttonTone = onLight ? 'subtle' : 'secondary'
 
   const copy = async () => {
     await navigator.clipboard.writeText(url)
@@ -111,20 +114,20 @@ export default function DeskCard({ propertyName, token, onLight = false }) {
 
       <div className="print-hide mx-auto mt-5 flex max-w-[340px] gap-2.5">
         <Button
-          tone="secondary"
+          tone={buttonTone}
           icon={Printer}
           onClick={() => window.print()}
           disabled={preview}
-          className={`flex-1 ${light}`}
+          className="flex-1"
         >
           Print card
         </Button>
         <Button
-          tone="secondary"
+          tone={buttonTone}
           icon={copied ? Check : Copy}
           onClick={copy}
           disabled={preview}
-          className={`flex-1 ${light}`}
+          className="flex-1"
         >
           {copied ? 'Copied' : 'Copy link'}
         </Button>

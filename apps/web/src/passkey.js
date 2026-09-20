@@ -45,8 +45,24 @@ export function unsupportedReason() {
 }
 
 /** True when the guest dismissed the OS sheet rather than something breaking. */
-export const isCancellation = (err) =>
-  err?.name === 'NotAllowedError' || err?.name === 'AbortError'
+/**
+ * Whether the ceremony ended without a credential for a reason the guest can
+ * retry.
+ *
+ * WebAuthn deliberately collapses several failures into `NotAllowedError` so a
+ * site cannot probe the authenticator: a dismissed sheet, a timeout, an RP ID
+ * that is not a suffix of the page's origin, and a blocked permissions policy
+ * are indistinguishable here. Calling all of them "dismissed" blames the guest
+ * for what may be our misconfiguration, so the wording stays neutral and the
+ * name is logged for whoever is looking at a console.
+ */
+export const isCancellation = (err) => {
+  const cancelled = err?.name === 'NotAllowedError' || err?.name === 'AbortError'
+  if (cancelled) {
+    console.warn('[passkey] no credential:', err.name, err.message, '| origin', location.origin)
+  }
+  return cancelled
+}
 
 /* ------------------------------------------------------------------ */
 /* Ceremonies                                                          */
