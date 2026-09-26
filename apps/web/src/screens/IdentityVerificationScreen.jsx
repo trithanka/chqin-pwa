@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowRight, Camera, Check, ShieldCheck } from 'lucide-react'
 import { PrimaryButton, Screen, ScreenTitle } from '../components/ui'
 import { useCamera } from '../useCamera'
+import { readAadhaar, snapshot, warmUp } from '../aadhaarOcr'
 import { failed, succeeded } from '../lib/haptics'
 
 /**
@@ -10,7 +11,8 @@ import { failed, succeeded } from '../lib/haptics'
  *
  * Typing the number is the main path because it's faster and more reliable
  * than reading a card in lobby light; the camera is the fallback for someone
- * who'd rather not type twelve digits, and it hands off to the desk.
+ * who'd rather not type twelve digits: it reads the number off the card into
+ * the field, and the photo is still recorded for the desk.
  *
  * Three beats: number → OTP → confirm what came back. The consent tick sits on
  * the first one, next to the number: consent has to be given before the number
@@ -116,14 +118,20 @@ export default function IdentityVerificationScreen({
     }
   }
 
-  /** The camera path: a photo for the desk, then back to the number. */
+  /** The camera path: read the number off the photo, then back to the field. */
   const capture = async () => {
+    const image = snapshot(camera.videoRef.current)
     camera.capture()
     setScanning(false)
     setBusy(true)
+    setError(null)
     try {
-      await recordCapture()
-      setError(null)
+      const [number] = await Promise.all([
+        image ? readAadhaar(image).catch(() => null) : null,
+        recordCapture(),
+      ])
+      if (number) setAadhaar(groupAadhaar(number))
+      else setError('Couldn’t read the number from the card — type it in instead.')
     } catch (err) {
       setError(err.message)
     } finally {
@@ -187,6 +195,8 @@ export default function IdentityVerificationScreen({
                 <div className="mt-2.5 min-h-[38px]">
                   {error ? (
                     <p className="text-[13px] font-medium leading-snug text-red-600">{error}</p>
+                  ) : busy ? (
+                    <p className="text-[12.5px] leading-snug text-slate-500">Reading the card…</p>
                   ) : (
                     <p className="text-[12.5px] leading-snug text-slate-500">
                       We send a code to the mobile registered with your Aadhaar.
@@ -203,6 +213,7 @@ export default function IdentityVerificationScreen({
                   onClick={() => {
                     setScanning(true)
                     camera.start()
+                    warmUp().catch(() => {}) // model loads while the card is lined up
                   }}
                   className="mt-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-slate-500 transition-colors hover:text-blue-600"
                 >
