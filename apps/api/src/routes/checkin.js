@@ -4,7 +4,7 @@ import { conflict, notFound } from '../lib/errors.js'
 import { body } from '../lib/validate.js'
 import { logEvent } from '../services/audit.js'
 import { checkIn, findByIdempotencyKey } from '../services/checkins.js'
-import { loadAny, loadOpen } from '../services/sessions.js'
+import { isOpen, loadAny } from '../services/sessions.js'
 import { stayFrom } from '../services/stay.js'
 
 export const checkin = new Hono()
@@ -12,9 +12,9 @@ export const checkin = new Hono()
 checkin.post('/', body(checkinRequest), async (c) => {
   const { sessionId, idempotencyKey, stay, noPasskeyReason } = c.get('body')
 
-  const open = await loadOpen(sessionId)
-  const session = open ?? (await loadAny(sessionId))
+  const session = await loadAny(sessionId)
   if (!session) throw notFound()
+  const open = isOpen(session)
 
   // A retry after a dropped response must not 404 on the session its own first
   // attempt consumed — the idempotency key is the whole point.

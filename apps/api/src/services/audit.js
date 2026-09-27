@@ -38,9 +38,14 @@ const clean = (value) => {
 /**
  * Append-only, best-effort: an audit write must never fail a check-in, so this
  * swallows its own errors and logs them instead.
+ *
+ * It also never delays one: nothing is returned, so a caller's `await` resolves
+ * at once and the row is written after the response has gone. That's a database
+ * round trip off every guest step. It relies on a long-running process — on a
+ * serverless host the write could be cut off when the function freezes.
  */
 export function logEvent(c, fields) {
-  return db
+  db
     .insert(authEvents)
     .values({
       guestId: fields.guestId ?? null,

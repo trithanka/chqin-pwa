@@ -26,6 +26,14 @@ export const pool = new pg.Pool({
    * any such device would means we close them rather than discover them dead.
    */
   idleTimeoutMillis: isRemote() ? 10_000 : 30_000,
+  /**
+   * …except on the server, where no hotel router sits in between and the
+   * keepalives below hold the flow open. There one connection is always kept:
+   * guests pause longer than the idle timeout between every step (typing an
+   * Aadhaar number, waiting for an OTP), and without it each step reconnected
+   * — TLS plus pooler auth, about 1.4 s measured against Singapore.
+   */
+  min: isRemote() && process.env.NODE_ENV === 'production' ? 1 : 0,
   // Keepalives on the ones still in use, for the same reason.
   keepAlive: true,
   keepAliveInitialDelayMillis: 5_000,

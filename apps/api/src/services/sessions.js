@@ -47,12 +47,12 @@ export async function loadAny(sessionId) {
   return row ?? null
 }
 
+export const isOpen = (session) => session.status === 'open' && session.expiresAt >= new Date()
+
 /** Session that is still open and unexpired, or null. */
 export async function loadOpen(sessionId) {
   const session = await loadAny(sessionId)
-  if (!session) return null
-  if (session.status !== 'open' || session.expiresAt < new Date()) return null
-  return session
+  return session && isOpen(session) ? session : null
 }
 
 /** Same, but throws the 404 every route would otherwise repeat. */
