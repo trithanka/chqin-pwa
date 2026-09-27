@@ -59,6 +59,17 @@ export default defineConfig({
         // Everything the app needs ships in the build — fonts included — so
         // precaching alone gets us a fully offline demo.
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // OCR files (~7 MB) are cached on first use, not at install, so guests
+        // who type their Aadhaar number never download them.
+        globIgnores: ['**/worker.min-*.js', '**/tesseract-core-*.js'],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) =>
+              /^\/(ocr\/|assets\/(worker\.min|tesseract-core)-)/.test(url.pathname),
+            handler: 'CacheFirst',
+            options: { cacheName: 'ocr' },
+          },
+        ],
       },
       devOptions: {
         // Lets you exercise the service worker with `npm run dev` too.

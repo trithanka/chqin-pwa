@@ -79,6 +79,11 @@ export default function IdentityVerificationScreen({
     if (stage === 'otp') otpRef.current?.focus()
   }, [stage])
 
+  // Load OCR while the guest reads the screen, so a scan reads the card at once.
+  useEffect(() => {
+    warmUp().catch(() => {})
+  }, [])
+
   const digits = aadhaar.replace(/\s/g, '')
 
   const sendOtp = async () => {
@@ -213,7 +218,6 @@ export default function IdentityVerificationScreen({
                   onClick={() => {
                     setScanning(true)
                     camera.start()
-                    warmUp().catch(() => {}) // model loads while the card is lined up
                   }}
                   className="mt-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-slate-500 transition-colors hover:text-blue-600"
                 >

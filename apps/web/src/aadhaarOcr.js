@@ -1,4 +1,8 @@
 import { isValidAadhaar } from '@chqin/shared'
+import workerPath from 'tesseract.js/dist/worker.min.js?url'
+// ponytail: SIMD build only (Safari 16.4+, Chrome 91+); older phones fail the
+// scan and type the number. Add tesseract-core-lstm as a fallback if that bites.
+import corePath from 'tesseract.js-core/tesseract-core-simd-lstm.wasm.js?url'
 
 /**
  * Read the Aadhaar number off the card, on the device.
@@ -7,10 +11,12 @@ import { isValidAadhaar } from '@chqin/shared'
  * the last four digits. So it's OCR — Tesseract in the browser, and the photo
  * never leaves the phone.
  *
- * Speed comes from three things: the worker (and its model download) starts
- * the moment the camera opens, so it's ready by the time the card is lined up;
- * it's kept for the next attempt instead of torn down; and it only sees what
- * the guest saw in the frame, scaled down to a size the digits still read at.
+ * Speed comes from four things: every file (worker, engine, English model) is
+ * served from our own origin and kept by the service worker, so after the first
+ * time nothing is downloaded at all; the worker starts when the identity screen
+ * opens, so it's ready by the time the card is lined up; it's kept for the next
+ * attempt instead of torn down; and it only sees what the guest saw in the
+ * frame, scaled down to a size the digits still read at.
  *
  * Each line is reduced to its digits and a line of exactly twelve that passes
  * Verhoeff wins. That skips the 16-digit VID and the date of birth, and a
@@ -24,7 +30,7 @@ let workerPromise = null
 /** Start loading Tesseract now; safe to call as often as you like. */
 export function warmUp() {
   workerPromise ??= import('tesseract.js')
-    .then(({ createWorker }) => createWorker('eng'))
+    .then(({ createWorker }) => createWorker('eng', undefined, { workerPath, corePath, langPath: '/ocr' }))
     .then(async (worker) => {
       await worker.setParameters({ tessedit_char_whitelist: '0123456789 ' })
       return worker
