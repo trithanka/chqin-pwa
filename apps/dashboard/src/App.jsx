@@ -14,6 +14,8 @@ import CodePage from './dashboard/CodePage'
 import SettingsPage from './dashboard/SettingsPage'
 import { useSession } from './session'
 
+import Logo from './components/Logo'
+
 /**
  * ChqIn for Business.
  *
@@ -23,15 +25,21 @@ import { useSession } from './session'
 export default function App() {
   const { status } = useSession()
 
-  // Until /staff/me answers we don't know, and guessing "signed out" would
-  // bounce a signed-in user to the login screen on every refresh.
+  // Instant fallback only if not yet hydrated from localStorage
   if (status === 'checking') {
     return (
-      <div className="grid min-h-dvh place-items-center text-[13.5px] font-medium text-slate-400">
-        Loading…
+      <div className="grid min-h-dvh place-items-center bg-[#070a12] text-white">
+        <div className="flex flex-col items-center gap-4">
+          <Logo className="h-9 w-auto text-white animate-pulse" />
+          <div className="flex items-center gap-2 text-[12.5px] font-semibold text-slate-400">
+            <span className="size-2 rounded-full bg-sky-400 animate-ping" />
+            <span>Connecting to desk…</span>
+          </div>
+        </div>
       </div>
     )
   }
+
 
   const signedIn = status === 'authenticated'
 

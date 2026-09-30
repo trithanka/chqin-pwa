@@ -4,13 +4,31 @@ import { api } from './api'
 /**
  * Who is signed in, according to the server.
  *
- * The session itself is an httpOnly cookie the browser can't read, so this
- * holds only the profile `/staff/me` returns. `status` matters: 'checking'
- * means we haven't asked yet, and rendering the sign-in screen during that
- * moment would bounce a signed-in user out on every refresh.
+ * Uses stale-while-revalidate with localStorage caching:
+ * - Eliminates the "Loading…" flash on app startup.
+ * - If the user was previously signed in, the cached profile renders immediately
+ *   while `/staff/me` revalidates silently in the background.
+ * - If the user is anonymous, the login/landing screen paints with 0ms latency.
  */
 
-let state = { status: 'checking', user: null }
+const STORAGE_KEY = 'chqin_staff_session'
+
+function getInitialState() {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (parsed && parsed.user) {
+        return { status: 'authenticated', user: parsed.user }
+      }
+    }
+  } catch {
+    // fallback
+  }
+  return { status: 'anonymous', user: null }
+}
+
+let state = getInitialState()
 const listeners = new Set()
 
 const set = (next) => {
@@ -27,9 +45,15 @@ const subscribe = (listener) => {
 export async function refresh() {
   try {
     const user = await api.get('/staff/me')
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ user, timestamp: Date.now() }))
+    } catch {}
     set({ status: 'authenticated', user })
     return user
   } catch {
+    try {
+      localStorage.removeItem(STORAGE_KEY)
+    } catch {}
     set({ status: 'anonymous', user: null })
     return null
   }
@@ -46,10 +70,14 @@ export async function registerVenue(payload) {
 }
 
 export async function signOut() {
+  try {
+    localStorage.removeItem(STORAGE_KEY)
+  } catch {}
   await api.post('/staff/logout', {}).catch(() => {})
   set({ status: 'anonymous', user: null })
 }
 
+// Revalidate in background without blocking initial paint
 refresh()
 
 export function useSession() {
@@ -60,3 +88,4 @@ export function useSession() {
   )
   return { ...current, signIn, signOut, registerVenue, refresh }
 }
+
