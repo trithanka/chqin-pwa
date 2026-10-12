@@ -1,7 +1,7 @@
 import { and, desc, eq, isNull } from 'drizzle-orm'
 import { isValidAadhaar } from '@chqin/shared'
 import { db, transaction } from '../db/client.js'
-import { bookings, guests, identityVerifications } from '../db/schema/index.js'
+import { entitlements, guests, identityVerifications } from '../db/schema/index.js'
 import { lookupHash } from '../lib/crypto.js'
 import { uuidv7 } from '../lib/ids.js'
 import { ApiError, notFound } from '../lib/errors.js'
@@ -172,9 +172,9 @@ export async function ensureSessionGuest(session, subject) {
 
     if (session.bookingId) {
       await tx
-        .update(bookings)
+        .update(entitlements)
         .set({ guestId: guest.id })
-        .where(and(eq(bookings.id, session.bookingId), isNull(bookings.guestId)))
+        .where(and(eq(entitlements.id, session.bookingId), isNull(entitlements.guestId)))
     }
 
     // The check was recorded against the session, before anyone existed to

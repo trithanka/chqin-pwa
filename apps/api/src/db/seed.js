@@ -1,4 +1,13 @@
-import { bookings, checkinSessions, venues, rooms } from './schema/index.js'
+import {
+  entitlements,
+  entrySessions,
+  gates,
+  hotelBookingRooms,
+  hotelBookings,
+  hotelRooms,
+  venues,
+} from './schema/index.js'
+import { latestFlowId } from '../services/flows.js'
 import { db, pool } from './client.js'
 import { newSessionToken, tokenHash } from '../lib/crypto.js'
 import { config, isRemote } from '../config.js'
@@ -45,6 +54,23 @@ const [venue] = await db
   })
   .returning({ id: venues.id })
 
+const flowId = await latestFlowId('hotel')
+
+// The desk QR never expires on its own — it's revoked, or the card is
+// reprinted.
+const deskToken = newSessionToken()
+const [gate] = await db
+  .insert(gates)
+  .values({
+    venueId: venue.id,
+    name: 'Front desk',
+    kind: 'desk',
+    flowId,
+    token: deskToken,
+    tokenHash: tokenHash(deskToken),
+  })
+  .returning({ id: gates.id })
+
 const bookingTokens = []
 
 for (const [ref, number, guestName] of [
@@ -53,42 +79,34 @@ for (const [ref, number, guestName] of [
   ['AUR-4823', '412', 'Rahul Sharma'],
 ]) {
   const [room] = await db
-    .insert(rooms)
+    .insert(hotelRooms)
     .values({ venueId: venue.id, number, roomType: 'Deluxe' })
-    .returning({ id: rooms.id })
+    .returning({ id: hotelRooms.id })
 
   const [booking] = await db
-    .insert(bookings)
-    .values({
-      venueId: venue.id,
-      bookingRef: ref,
-      guestName,
-      roomId: room.id,
-      arrivalDate: today,
-      departureDate: inDays(2),
-    })
-    .returning({ id: bookings.id })
+    .insert(entitlements)
+    .values({ venueId: venue.id, kind: 'booking', ref })
+    .returning({ id: entitlements.id })
+
+  await db.insert(hotelBookings).values({
+    entitlementId: booking.id,
+    guestName,
+    arrivalDate: today,
+    departureDate: inDays(2),
+  })
+  await db.insert(hotelBookingRooms).values({ bookingId: booking.id, roomId: room.id })
 
   const token = newSessionToken()
-  await db.insert(checkinSessions).values({
+  await db.insert(entrySessions).values({
     venueId: venue.id,
-    bookingId: booking.id,
+    gateId: gate.id,
+    flowId,
+    entitlementId: booking.id,
     tokenHash: tokenHash(token),
-    kind: 'booking',
     expiresAt: new Date(Date.now() + 3 * 86_400_000),
   })
   bookingTokens.push([ref, token])
 }
-
-// The desk QR never expires on its own — it's revoked, or the card is
-// reprinted.
-const deskToken = newSessionToken()
-await db.insert(checkinSessions).values({
-  venueId: venue.id,
-  tokenHash: tokenHash(deskToken),
-  kind: 'desk',
-  expiresAt: new Date(Date.now() + 3650 * 86_400_000),
-})
 
 console.log('seeded Hotel Aurora · 3 reservations arriving today')
 console.log(`desk QR token : ${deskToken}`)

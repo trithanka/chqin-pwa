@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { check, index, inet, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { guests } from './identity.js'
-import { checkinSessions } from './property.js'
+import { entrySessions } from './entry.js'
 import { uuidv7 } from '../../lib/ids.js'
 
 /**
@@ -13,7 +13,7 @@ export const webauthnChallenges = pgTable(
   'webauthn_challenges',
   {
     id: uuid('id').primaryKey().$defaultFn(uuidv7),
-    sessionId: uuid('session_id').references(() => checkinSessions.id, { onDelete: 'cascade' }),
+    sessionId: uuid('session_id').references(() => entrySessions.id, { onDelete: 'cascade' }),
     guestId: uuid('guest_id').references(() => guests.id, { onDelete: 'cascade' }),
     // A ceremony needs a user handle before a guest row exists. Minting it here
     // means an abandoned registration leaves nothing behind.

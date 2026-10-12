@@ -1,18 +1,21 @@
 import { and, count, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
 import { db, transaction } from '../db/client.js'
 import {
-  bookingRooms,
-  bookings,
-  checkinSessions,
-  checkins,
   credentials,
+  entitlements,
+  entries,
+  gates,
   guests,
+  hotelBookingRooms,
+  hotelBookings,
+  hotelEntryDetails,
+  hotelRooms,
   identityVerifications,
-  rooms,
   staffMemberships,
   staffUsers,
   venues,
 } from '../db/schema/index.js'
+import { latestFlowId } from './flows.js'
 import { newSessionToken, lookupHash, tokenHash, encrypt } from '../lib/crypto.js'
 import { hashPassword, verifyPassword } from '../lib/passwords.js'
 import { conflict, notFound, unauthorized } from '../lib/errors.js'
@@ -93,9 +96,21 @@ export async function register({
 
     if (roomList?.length) {
       await tx
-        .insert(rooms)
+        .insert(hotelRooms)
         .values(roomList.map((r) => ({ venueId: venue.id, number: r.number, roomType: r.type })))
     }
+
+    // The way in. Made here rather than on first ask so every venue has one
+    // from the moment it exists; the card is printed from it.
+    const token = newSessionToken()
+    await tx.insert(gates).values({
+      venueId: venue.id,
+      name: 'Front desk',
+      kind: 'desk',
+      flowId: await latestFlowId('hotel', tx),
+      token,
+      tokenHash: tokenHash(token),
+    })
 
     return { staffId: staff.id, venueId: venue.id, venueName: venue.name, name: staff.displayName }
   })
@@ -168,30 +183,30 @@ const bookingRow = {
   // different table, and a client that can't tell them apart sends check-in
   // ids to /bookings/:id — which 404s, and looks like missing data.
   kind: sql`'booking'`,
-  id: bookings.id,
-  reference: bookings.bookingRef,
-  guestId: bookings.guestId,
-  guestName: bookings.guestName,
+  id: entitlements.id,
+  reference: entitlements.ref,
+  guestId: entitlements.guestId,
+  guestName: hotelBookings.guestName,
   // Every room the booking holds, as one string — "003" or "003, 004". A row
   // per room would repeat the booking once per room in every list.
-  room: sql`string_agg(${rooms.number}, ', ' ORDER BY ${rooms.number})`,
-  roomIds: sql`coalesce(array_agg(${bookingRooms.roomId}) FILTER (WHERE ${bookingRooms.roomId} IS NOT NULL), '{}')`,
-  roomType: sql`min(${rooms.roomType})`,
-  arrival: bookings.arrivalDate,
-  departure: bookings.departureDate,
-  status: bookings.status,
-  source: bookings.pmsRef,
-  partySize: bookings.partySize,
-  roomsCount: bookings.roomsCount,
-  checkedInAt: checkins.checkedInAt,
-  journey: checkins.journey,
+  room: sql`string_agg(${hotelRooms.number}, ', ' ORDER BY ${hotelRooms.number})`,
+  roomIds: sql`coalesce(array_agg(${hotelBookingRooms.roomId}) FILTER (WHERE ${hotelBookingRooms.roomId} IS NOT NULL), '{}')`,
+  roomType: sql`min(${hotelRooms.roomType})`,
+  arrival: hotelBookings.arrivalDate,
+  departure: hotelBookings.departureDate,
+  status: hotelBookings.status,
+  source: hotelBookings.pmsRef,
+  partySize: hotelBookings.partySize,
+  roomsCount: hotelBookings.roomsCount,
+  checkedInAt: entries.enteredAt,
+  journey: hotelEntryDetails.journey,
   // Whether a passkey signed this check-in. Identity is what a check-in now
   // rests on, so one can be finished on a phone that never enrolled — and the
   // desk must not be told "Passkey Verified" about a guest who has none.
-  passkey: sql`${checkins.credentialId} IS NOT NULL`,
+  passkey: sql`${entries.credentialId} IS NOT NULL`,
   // The check-in behind the reservation, when there is one. Room changes are
   // addressed by check-in, so a row without this can't be moved from Today.
-  checkinId: checkins.id,
+  checkinId: entries.id,
 }
 
 /**
@@ -202,18 +217,24 @@ const bookingRow = {
 const bookingsQuery = (venueId, extra) =>
   db
     .select(bookingRow)
-    .from(bookings)
-    .leftJoin(bookingRooms, eq(bookingRooms.bookingId, bookings.id))
-    .leftJoin(rooms, eq(rooms.id, bookingRooms.roomId))
-    .leftJoin(checkins, eq(checkins.bookingId, bookings.id))
-    .where(extra ? and(eq(bookings.venueId, venueId), extra) : eq(bookings.venueId, venueId))
-    .groupBy(bookings.id, checkins.id)
+    .from(entitlements)
+    .innerJoin(hotelBookings, eq(hotelBookings.entitlementId, entitlements.id))
+    .leftJoin(hotelBookingRooms, eq(hotelBookingRooms.bookingId, hotelBookings.entitlementId))
+    .leftJoin(hotelRooms, eq(hotelRooms.id, hotelBookingRooms.roomId))
+    .leftJoin(entries, eq(entries.entitlementId, entitlements.id))
+    .leftJoin(hotelEntryDetails, eq(hotelEntryDetails.entryId, entries.id))
+    .where(
+      extra
+        ? and(eq(entitlements.venueId, venueId), extra)
+        : eq(entitlements.venueId, venueId),
+    )
+    .groupBy(entitlements.id, hotelBookings.entitlementId, entries.id, hotelEntryDetails.entryId)
 
 export const listBookings = (venueId) =>
-  bookingsQuery(venueId).orderBy(desc(bookings.arrivalDate), bookings.bookingRef)
+  bookingsQuery(venueId).orderBy(desc(hotelBookings.arrivalDate), entitlements.ref)
 
 export async function getBooking(venueId, id) {
-  const [row] = await bookingsQuery(venueId, eq(bookings.id, id))
+  const [row] = await bookingsQuery(venueId, eq(entitlements.id, id))
   if (!row) throw notFound('No such booking here.')
   return row
 }
@@ -227,28 +248,29 @@ export async function getBooking(venueId, id) {
  */
 export async function checkinCode(venueId) {
   const [existing] = await db
-    .select({ token: checkinSessions.token })
-    .from(checkinSessions)
+    .select({ token: gates.token })
+    .from(gates)
     .where(
       and(
-        eq(checkinSessions.venueId, venueId),
-        eq(checkinSessions.kind, 'desk'),
-        eq(checkinSessions.status, 'open'),
-        isNotNull(checkinSessions.token),
+        eq(gates.venueId, venueId),
+        eq(gates.kind, 'desk'),
+        eq(gates.status, 'active'),
+        isNotNull(gates.token),
       ),
     )
     .limit(1)
 
   if (existing?.token) return { token: existing.token }
 
+  // A venue made before gates existed has none yet.
   const token = newSessionToken()
-  await db.insert(checkinSessions).values({
+  await db.insert(gates).values({
     venueId,
+    name: 'Front desk',
+    kind: 'desk',
+    flowId: await latestFlowId('hotel'),
     token,
     tokenHash: tokenHash(token),
-    kind: 'desk',
-    // A printed card doesn't expire on a timer; it's revoked or reprinted.
-    expiresAt: new Date(Date.now() + 3650 * 86_400_000),
   })
 
   return { token }
@@ -264,37 +286,38 @@ export async function checkinCode(venueId) {
 export async function overview(venueId) {
   const today = new Date().toISOString().slice(0, 10)
 
-  const expected = await bookingsQuery(venueId, eq(bookings.arrivalDate, today))
+  const expected = await bookingsQuery(venueId, eq(hotelBookings.arrivalDate, today))
 
   const walkIns = await db
     .select({
       kind: sql`'walkin'`,
-      id: checkins.id,
+      id: entries.id,
       reference: sql`null`,
-      guestId: checkins.guestId,
+      guestId: entries.guestId,
       guestName: guests.displayName,
-      checkinId: checkins.id,
-      partySize: checkins.partySize,
-      roomsCount: checkins.roomsCount,
-      roomId: checkins.roomId,
-      roomIds: sql`case when ${checkins.roomId} is null then '{}'::uuid[] else array[${checkins.roomId}] end`,
-      room: rooms.number,
+      checkinId: entries.id,
+      partySize: hotelEntryDetails.partySize,
+      roomsCount: hotelEntryDetails.roomsCount,
+      roomId: hotelEntryDetails.roomId,
+      roomIds: sql`case when ${hotelEntryDetails.roomId} is null then '{}'::uuid[] else array[${hotelEntryDetails.roomId}] end`,
+      room: hotelRooms.number,
       roomType: sql`null`,
       arrival: sql`${today}`,
       departure: sql`null`,
       status: sql`'checked_in'`,
       source: sql`null`,
-      checkedInAt: checkins.checkedInAt,
-      journey: checkins.journey,
+      checkedInAt: entries.enteredAt,
+      journey: hotelEntryDetails.journey,
     })
-    .from(checkins)
-    .leftJoin(guests, eq(guests.id, checkins.guestId))
-    .leftJoin(rooms, eq(rooms.id, checkins.roomId))
+    .from(entries)
+    .innerJoin(hotelEntryDetails, eq(hotelEntryDetails.entryId, entries.id))
+    .leftJoin(guests, eq(guests.id, entries.guestId))
+    .leftJoin(hotelRooms, eq(hotelRooms.id, hotelEntryDetails.roomId))
     .where(
       and(
-        eq(checkins.venueId, venueId),
-        isNull(checkins.bookingId),
-        sql`${checkins.checkedInAt}::date = CURRENT_DATE`,
+        eq(entries.venueId, venueId),
+        isNull(entries.entitlementId),
+        sql`${entries.enteredAt}::date = CURRENT_DATE`,
       ),
     )
 
@@ -302,13 +325,13 @@ export async function overview(venueId) {
 
   const [inHouse] = await db
     .select({ value: count() })
-    .from(checkins)
-    .where(and(eq(checkins.venueId, venueId), sql`${checkins.checkedInAt}::date >= CURRENT_DATE - 1`))
+    .from(entries)
+    .where(and(eq(entries.venueId, venueId), sql`${entries.enteredAt}::date >= CURRENT_DATE - 1`))
 
   const [roomCount] = await db
     .select({ value: count() })
-    .from(rooms)
-    .where(eq(rooms.venueId, venueId))
+    .from(hotelRooms)
+    .where(eq(hotelRooms.venueId, venueId))
 
   return {
     date: today,
@@ -334,14 +357,14 @@ export async function listGuests(venueId) {
       dateOfBirth: guests.dateOfBirth,
       gender: guests.gender,
       memberSince: guests.createdAt,
-      stays: count(checkins.id),
-      lastStay: sql`max(${checkins.checkedInAt})`,
+      stays: count(entries.id),
+      lastStay: sql`max(${entries.enteredAt})`,
     })
-    .from(checkins)
-    .innerJoin(guests, eq(guests.id, checkins.guestId))
-    .where(eq(checkins.venueId, venueId))
+    .from(entries)
+    .innerJoin(guests, eq(guests.id, entries.guestId))
+    .where(eq(entries.venueId, venueId))
     .groupBy(guests.id)
-    .orderBy(desc(sql`max(${checkins.checkedInAt})`))
+    .orderBy(desc(sql`max(${entries.enteredAt})`))
 
   if (!rows.length) return []
 
@@ -366,8 +389,8 @@ export async function getGuest(venueId, id) {
       memberSince: guests.createdAt,
     })
     .from(guests)
-    .innerJoin(checkins, eq(checkins.guestId, guests.id))
-    .where(and(eq(guests.id, id), eq(checkins.venueId, venueId)))
+    .innerJoin(entries, eq(entries.guestId, guests.id))
+    .where(and(eq(guests.id, id), eq(entries.venueId, venueId)))
     .limit(1)
 
   // Not "not found" by accident: a guest who has never stayed here is simply
@@ -400,9 +423,7 @@ export async function getGuest(venueId, id) {
     .orderBy(desc(identityVerifications.createdAt))
     .limit(1)
 
-  const stays = await bookingsQuery(venueId).where(
-    and(eq(bookings.venueId, venueId), eq(bookings.guestId, id)),
-  )
+  const stays = await bookingsQuery(venueId, eq(entitlements.guestId, id))
 
   return {
     ...guest,
@@ -490,18 +511,21 @@ export async function saveSettings(venueId, patch) {
 export async function listRooms(venueId) {
   const rows = await db
     .select({
-      id: rooms.id,
-      number: rooms.number,
-      roomType: rooms.roomType,
-      takenBy: checkins.id,
+      id: hotelRooms.id,
+      number: hotelRooms.number,
+      roomType: hotelRooms.roomType,
+      takenBy: sql`(
+        select ${entries.id}
+        from ${hotelEntryDetails}
+        join ${entries} on ${entries.id} = ${hotelEntryDetails.entryId}
+        where ${hotelEntryDetails.roomId} = ${hotelRooms.id}
+          and ${entries.enteredAt}::date >= CURRENT_DATE - 1
+        limit 1
+      )`,
     })
-    .from(rooms)
-    .leftJoin(
-      checkins,
-      and(eq(checkins.roomId, rooms.id), sql`${checkins.checkedInAt}::date >= CURRENT_DATE - 1`),
-    )
-    .where(eq(rooms.venueId, venueId))
-    .orderBy(rooms.number)
+    .from(hotelRooms)
+    .where(eq(hotelRooms.venueId, venueId))
+    .orderBy(hotelRooms.number)
 
   return rows
 }
@@ -536,27 +560,28 @@ export async function assignRoom(venueId, checkinId, roomIds) {
   return transaction(async (tx) => {
     const found = wanted.length
       ? await tx
-          .select({ id: rooms.id, number: rooms.number })
-          .from(rooms)
-          .where(and(inArray(rooms.id, wanted), eq(rooms.venueId, venueId)))
+          .select({ id: hotelRooms.id, number: hotelRooms.number })
+          .from(hotelRooms)
+          .where(and(inArray(hotelRooms.id, wanted), eq(hotelRooms.venueId, venueId)))
       : []
 
     if (found.length !== wanted.length) throw notFound('No such room here.')
 
     const [stay] = await tx
       .select({
-        id: checkins.id,
-        bookingId: checkins.bookingId,
-        guestId: checkins.guestId,
+        id: entries.id,
+        bookingId: entries.entitlementId,
+        guestId: entries.guestId,
         guestName: guests.displayName,
-        checkedInAt: checkins.checkedInAt,
-        nights: checkins.nights,
-        partySize: checkins.partySize,
-        roomsCount: checkins.roomsCount,
+        checkedInAt: entries.enteredAt,
+        nights: hotelEntryDetails.nights,
+        partySize: hotelEntryDetails.partySize,
+        roomsCount: hotelEntryDetails.roomsCount,
       })
-      .from(checkins)
-      .leftJoin(guests, eq(guests.id, checkins.guestId))
-      .where(and(eq(checkins.id, checkinId), eq(checkins.venueId, venueId)))
+      .from(entries)
+      .innerJoin(hotelEntryDetails, eq(hotelEntryDetails.entryId, entries.id))
+      .leftJoin(guests, eq(guests.id, entries.guestId))
+      .where(and(eq(entries.id, checkinId), eq(entries.venueId, venueId)))
       .limit(1)
 
     if (!stay) throw notFound('No such check-in here.')
@@ -571,22 +596,28 @@ export async function assignRoom(venueId, checkinId, roomIds) {
       departure.setUTCDate(departure.getUTCDate() + Math.max(stay.nights ?? 1, 1))
 
       const [booking] = await tx
-        .insert(bookings)
+        .insert(entitlements)
         .values({
           venueId,
+          kind: 'booking',
           // Not a PMS reference and shouldn't look like one: WI marks a stay
           // this system created, and the check-in's own id keeps it unique
           // per venue without a counter to race on.
-          bookingRef: `WI-${stay.id.slice(-6).toUpperCase()}`,
-          guestName: stay.guestName ?? 'Walk-in guest',
+          ref: `WI-${stay.id.slice(-6).toUpperCase()}`,
           guestId: stay.guestId,
-          arrivalDate: arrival,
-          departureDate: departure.toISOString().slice(0, 10),
-          partySize: stay.partySize,
-          roomsCount: stay.roomsCount,
-          status: 'checked_in',
+          status: 'used',
         })
-        .returning({ id: bookings.id })
+        .returning({ id: entitlements.id })
+
+      await tx.insert(hotelBookings).values({
+        entitlementId: booking.id,
+        guestName: stay.guestName ?? 'Walk-in guest',
+        arrivalDate: arrival,
+        departureDate: departure.toISOString().slice(0, 10),
+        partySize: stay.partySize,
+        roomsCount: stay.roomsCount,
+        status: 'checked_in',
+      })
 
       bookingId = booking.id
     }
@@ -594,18 +625,19 @@ export async function assignRoom(venueId, checkinId, roomIds) {
     if (bookingId) {
       // Replaced wholesale: the list the desk sent is the answer, and working
       // out which rows to add and which to remove is the same two statements.
-      await tx.delete(bookingRooms).where(eq(bookingRooms.bookingId, bookingId))
+      await tx.delete(hotelBookingRooms).where(eq(hotelBookingRooms.bookingId, bookingId))
       if (wanted.length) {
-        await tx.insert(bookingRooms).values(wanted.map((roomId) => ({ bookingId, roomId })))
+        await tx.insert(hotelBookingRooms).values(wanted.map((roomId) => ({ bookingId, roomId })))
       }
     }
 
+    // The entry's room is where *this guest* sleeps; a party with two rooms
+    // still has one first room, and the guest's own stay screen shows it.
     await tx
-      .update(checkins)
-      // checkins.roomId is where *this guest* sleeps; a party with two rooms
-      // still has one first room, and the guest's own stay screen shows it.
-      .set({ roomId: wanted[0] ?? null, bookingId })
-      .where(eq(checkins.id, checkinId))
+      .update(hotelEntryDetails)
+      .set({ roomId: wanted[0] ?? null })
+      .where(eq(hotelEntryDetails.entryId, checkinId))
+    await tx.update(entries).set({ entitlementId: bookingId }).where(eq(entries.id, checkinId))
 
     return {
       id: checkinId,
@@ -675,10 +707,10 @@ export async function saveProperty(venueId, patch) {
  */
 export async function addRooms(venueId, list) {
   const added = await db
-    .insert(rooms)
+    .insert(hotelRooms)
     .values(list.map(({ number, type }) => ({ venueId, number, roomType: type ?? null })))
-    .onConflictDoNothing({ target: [rooms.venueId, rooms.number] })
-    .returning({ id: rooms.id, number: rooms.number })
+    .onConflictDoNothing({ target: [hotelRooms.venueId, hotelRooms.number] })
+    .returning({ id: hotelRooms.id, number: hotelRooms.number })
 
   return { added, skipped: list.length - added.length }
 }
@@ -692,23 +724,26 @@ export async function addRooms(venueId, list) {
  */
 export async function removeRoom(venueId, roomId) {
   const [room] = await db
-    .select({ id: rooms.id })
-    .from(rooms)
-    .where(and(eq(rooms.id, roomId), eq(rooms.venueId, venueId)))
+    .select({ id: hotelRooms.id })
+    .from(hotelRooms)
+    .where(and(eq(hotelRooms.id, roomId), eq(hotelRooms.venueId, venueId)))
     .limit(1)
 
   if (!room) throw notFound('No such room here.')
 
   const [occupied] = await db
-    .select({ id: checkins.id })
-    .from(checkins)
-    .where(and(eq(checkins.roomId, roomId), sql`${checkins.checkedInAt}::date >= CURRENT_DATE - 1`))
+    .select({ id: entries.id })
+    .from(hotelEntryDetails)
+    .innerJoin(entries, eq(entries.id, hotelEntryDetails.entryId))
+    .where(
+      and(eq(hotelEntryDetails.roomId, roomId), sql`${entries.enteredAt}::date >= CURRENT_DATE - 1`),
+    )
     .limit(1)
 
   if (occupied) {
     throw conflict('room_occupied', 'Someone is in that room. Move them first.')
   }
 
-  await db.delete(rooms).where(and(eq(rooms.id, roomId), eq(rooms.venueId, venueId)))
+  await db.delete(hotelRooms).where(and(eq(hotelRooms.id, roomId), eq(hotelRooms.venueId, venueId)))
   return { id: roomId }
 }

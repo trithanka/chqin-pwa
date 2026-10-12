@@ -1,352 +1,123 @@
 # ChqIn — data model
 
-What the backend needs the day it stops being localStorage, designed so the
-same schema survives the first two orders of magnitude of growth.
+How the database is laid out, and why. The source of truth is `apps/api/src/db/schema/`; this page explains the shape. For how an entrance works end to end, read `entry-flow-explained.md` first.
 
 ## The short answer
 
-**One database now: PostgreSQL.** Plus two stores that aren't databases and
-shouldn't be conflated with one:
+**One database: PostgreSQL.** There is no Redis and no object storage today.
 
-| Store | Holds | Why not Postgres |
+| Store | Holds | Notes |
 | --- | --- | --- |
-| **PostgreSQL** | Guests, credentials, venues, bookings, sessions, check-ins, audit | — |
-| **Redis** | WebAuthn challenges, QR session tokens, rate-limit counters | Write-once, read-once, expires in 60s. Native TTL, no vacuum pressure, no table bloat. |
-| **Object storage** (S3 / R2) | ID document images, if you keep them at all | Blobs don't belong in a row. Server-side encryption, lifecycle-expiry, and the DB stores only a pointer + hash. |
+| **PostgreSQL** | Everything: guests, credentials, venues, gates, flows, sessions, entries, staff, audit | WebAuthn challenges and rate limiting also live here for now (`webauthn_challenges`). |
+| Redis | Not used | Add it when measurement shows challenges or sessions are the hot write. |
+| Object storage | Not used | ID images are not kept. If a regulation ever requires it, the row stores a pointer and hash only. |
 
-Resist adding more. No document store, no graph DB, no separate search
-cluster — the access patterns here are all key lookups and small joins.
+IDs are UUIDv7 generated in Node (`lib/ids.js`), never by a database default. Time-ordered ids keep index inserts append-only without exposing a countable sequence. Tokens are stored as SHA-256 hashes, so a database leak is not a set of working keys.
 
-### Do the arithmetic before designing for scale
+## The structural decision
 
-A 10,000-property chain at 100 rooms each, every room turning over daily, is
-**1M check-ins/day ≈ 12/s average**. Peak is the 2–6pm arrival window, call it
-20× average: **~250/s**. A single Postgres primary with a read replica handles
-that with room to spare.
+**Guests are global. Venues and entries are per-place.**
 
-So the scalability work is *not* sharding. It's three things: keeping the
-identity domain separable from the stay domain, partitioning the two tables
-that grow unboundedly, and making the hot path a single indexed lookup. All
-three are schema decisions you make now and can't retrofit cheaply.
-
-## Beyond hotels
-
-The product starts at hotels and is meant to reach anywhere someone arrives —
-apartment blocks, temples, stations. The identity domain already generalises
-without a change: a ChqIn Identity has nothing hotel-shaped in it.
-
-The venue domain is where the assumptions live, so `hotels` is `venues` with a
-`kind` from day one. What doesn't generalise yet is **how entry is granted**,
-and there are three shapes:
-
-| Pattern | Where | What grants entry |
-| --- | --- | --- |
-| Reservation-led | Hotel, railway, event, apartment guest | A prior record naming an expected person |
-| Membership-led | Apartment resident, office, gym | A standing right, no per-visit record |
-| Open | Temple, museum, public building | Nothing prior — arrival is the event |
-
-Today only the first is modelled, in its hotel dialect: `bookings`, and a
-`checkins.booking_id` that is NOT NULL. Generalising means `checkins` pointing
-at a nullable *entitlement* — a booking, a membership, a ticket, or nothing —
-with kind-specific detail in a satellite table rather than forty nullable
-columns. **Don't build that until the second vertical is real**; the shape of
-"temple entry" is obvious after one conversation and speculative before it.
-
-Two things to decide before that day rather than after:
-
-**Volume changes by orders of magnitude.** A large hotel chain is ~1M
-check-ins/day. A national rail network is tens of millions, arriving in
-90-second spikes at a gate rather than over an afternoon. That is where the
-identity/venue split stops being tidiness and becomes two deployments.
-
-**Open venues are a surveillance question, not just a schema one.** Hotels are
-legally required to identify guests, which is why the identity check exists. A
-temple is not — and a database recording which identified person entered which
-temple on which day is a movement-tracking system regardless of intent. Entry
-at open venues should be able to work without writing an identity-linked row at
-all: capacity counting, or a pseudonymous token. `checkins.guest_id` is already
-nullable; retention rules per venue kind are the other half, and both are far
-easier to build in now than to retrofit under scrutiny.
-
-## The one structural decision that matters
-
-**Guests are global. Stays are per-property.**
-
-A ChqIn Identity belongs to the guest, not the hotel — that's the entire
-premise of the product. Bookings, rooms and check-ins belong to a property.
-These two domains have different tenancy, different growth curves, different
-retention rules, and different regulators.
-
-Keep them cleanly separated from day one — no foreign keys from the identity
-tables *into* property tables, and every property-scoped table carrying
-`venue_id` — and the day you split them into two services or two clusters is
-a deployment change, not a rewrite. Blur them (e.g. hanging credentials off a
-booking) and you've built a per-hotel login system, which is the thing ChqIn
-exists not to be.
+A ChqIn identity belongs to the guest, not the hotel. Gates, flows, sessions, entitlements and entries belong to a venue and carry `venue_id`. The identity tables never point into venue tables, so splitting them into two services later is a deployment change, not a rewrite.
 
 ```mermaid
 erDiagram
-    GUESTS ||--o{ CREDENTIALS : "enrols"
-    GUESTS ||--o{ IDENTITY_VERIFICATIONS : "proves"
-    GUESTS ||--o{ CHECKINS : "performs"
-    HOTELS ||--o{ ROOMS : has
-    HOTELS ||--o{ BOOKINGS : receives
-    HOTELS ||--o{ CHECKIN_SESSIONS : issues
-    BOOKINGS ||--o{ CHECKIN_SESSIONS : "may target"
-    BOOKINGS ||--o{ CHECKINS : "resolves to"
-    CHECKIN_SESSIONS ||--o| CHECKINS : produces
-    CREDENTIALS ||--o{ CHECKINS : authenticates
-    ROOMS ||--o{ CHECKINS : "assigned in"
+    GUESTS ||--o{ CREDENTIALS : enrols
+    GUESTS ||--o{ IDENTITY_VERIFICATIONS : proves
+    VENUES ||--o{ GATES : has
+    FLOW_DEFINITIONS ||--o{ GATES : "run by"
+    GATES ||--o{ ENTRY_SESSIONS : "scan starts"
+    FLOW_DEFINITIONS ||--o{ ENTRY_SESSIONS : "pinned version"
+    ENTITLEMENTS ||--o{ ENTRY_SESSIONS : "may grant"
+    ENTRY_SESSIONS ||--o| ENTRIES : produces
+    GUESTS ||--o{ ENTRIES : "performs"
+    VENUES ||--o{ ENTITLEMENTS : issues
+    ENTITLEMENTS ||--o| HOTEL_BOOKINGS : "hotel detail"
+    HOTEL_BOOKINGS ||--o{ HOTEL_BOOKING_ROOMS : holds
+    HOTEL_ROOMS ||--o{ HOTEL_BOOKING_ROOMS : "given in"
+    ENTRIES ||--o| HOTEL_ENTRY_DETAILS : "hotel detail"
 ```
 
-Left of the line: `guests`, `credentials`, `identity_verifications`. Right of
-it: `hotels`, `rooms`, `bookings`, `checkin_sessions`. `checkins` is the join —
-it's the only table that legitimately spans both, which is exactly what makes
-it the audit record.
+## Naming
 
-## Tables needed right now
+No prefix means any kind of gate can use the table. A prefix means it belongs to one kind of venue: `hotel_` today, `ticket_`, `slot_`, `permit_` or `event_` when those verticals arrive. Reading a table name tells you which gate it serves.
 
-Postgres flavour. `uuid_v7()` throughout — time-ordered UUIDs keep B-tree
-inserts append-only (v4 scatters writes across the index) without leaking a
-countable sequence to guests.
+## Tables
 
-### Identity domain
+### Identity domain (global)
 
-```sql
-CREATE TABLE guests (
-  id              uuid PRIMARY KEY DEFAULT uuid_v7(),
-  display_name    text NOT NULL,
-  -- Contact is for receipts and recovery, never for login. Hashed columns let
-  -- you look a guest up without holding a plaintext directory.
-  email_hash      bytea UNIQUE,
-  phone_hash      bytea UNIQUE,
-  email_enc       bytea,          -- envelope-encrypted, KMS-managed key
-  phone_enc       bytea,
-  -- Filled in by the identity check, not at signup: a guest row exists from
-  -- the moment a reservation is matched, before any ID has been seen.
-  date_of_birth   date,
-  gender          text CHECK (gender IN ('female','male','other','undisclosed')),
-  status          text NOT NULL DEFAULT 'active'
-                  CHECK (status IN ('active','suspended','erased')),
-  created_at      timestamptz NOT NULL DEFAULT now(),
-  updated_at      timestamptz NOT NULL DEFAULT now()
-);
+| Table | Purpose |
+| --- | --- |
+| `guests` | A person. Contact details are keyed-hashed (`email_hmac`, `phone_hmac`) for lookup and encrypted (`email_enc`, `phone_enc`) for use. Status: active, suspended, erased. |
+| `credentials` | One row per passkey. This is the login system. `credential_id` is unique; `sign_count` going backwards signals a cloned authenticator. |
+| `identity_verifications` | KYC events, never the document: method, result, hashed document id, last four digits, the holder's name, date of birth and address as returned, and the consent that was shown. |
+| `webauthn_challenges` | Single-use ceremony challenges with a short expiry, tied to an entry session. |
+| `auth_events` | Append-only log of every ceremony. No foreign keys on purpose, so it can record an attempt against a credential that was just deleted and never blocks on another table's lock. |
 
--- One row per passkey. This table is the login system.
-CREATE TABLE credentials (
-  id              uuid PRIMARY KEY DEFAULT uuid_v7(),
-  guest_id        uuid NOT NULL REFERENCES guests(id) ON DELETE CASCADE,
-  credential_id   bytea NOT NULL,          -- raw WebAuthn credential ID
-  public_key      bytea NOT NULL,          -- COSE key
-  alg             int  NOT NULL,           -- -7 ES256, -257 RS256
-  sign_count      bigint NOT NULL DEFAULT 0,
-  aaguid          uuid,
-  transports      text[],
-  backup_eligible boolean NOT NULL DEFAULT false,
-  backed_up       boolean NOT NULL DEFAULT false,
-  device_label    text,                    -- "iPhone 15" — for a revoke UI
-  created_at      timestamptz NOT NULL DEFAULT now(),
-  last_used_at    timestamptz,
-  revoked_at      timestamptz
-);
+### Venue domain
 
--- THE hot path: a discoverable-credential login arrives with only this ID.
-CREATE UNIQUE INDEX credentials_credential_id_key ON credentials (credential_id);
-CREATE INDEX credentials_guest_active ON credentials (guest_id) WHERE revoked_at IS NULL;
-```
+| Table | Purpose |
+| --- | --- |
+| `venues` | Anywhere someone arrives. `kind` is hotel, apartment, temple, station, office, monument, park, museum, event or other. `settings` (jsonb) holds what onboarding collected: services, guest-facing essentials, business registration, per-service contacts. `retention_days` sets how long entry history is kept. |
+| `staff_users`, `staff_memberships`, `staff_sessions`, `staff_tokens` | Dashboard accounts, their role at a venue, revocable server-side sessions, and one-time email and reset tokens. |
 
-`sign_count` earns its place: an authenticator that reports a counter lower
-than the stored one signals a cloned credential. Store it, compare it, alarm
-on it.
+### The entry engine (any gate)
 
-```sql
--- KYC events, not documents. The image lives in object storage or nowhere.
-CREATE TABLE identity_verifications (
-  id              uuid PRIMARY KEY DEFAULT uuid_v7(),
-  guest_id        uuid NOT NULL REFERENCES guests(id) ON DELETE CASCADE,
-  method          text NOT NULL,           -- 'document', 'manual_desk', …
-  provider        text,                    -- KYC vendor, if any
-  provider_ref    text,                    -- their case ID, for disputes
-  document_type   text,                    -- 'passport', 'national_id', …
-  document_hash   bytea,                   -- dedupe + match, never the number
-  document_last4  text,                    -- all a human ever needs to see
-  artifact_uri    text,                    -- s3://… , NULL if not retained
-  result          text NOT NULL CHECK (result IN ('passed','failed','manual_review')),
-  verified_at     timestamptz,
-  expires_at      timestamptz,             -- re-verify after N years
-  created_at      timestamptz NOT NULL DEFAULT now()
-);
-```
+| Table | Purpose |
+| --- | --- |
+| `flow_definitions` | An ordered list of steps as JSON, versioned by `(key, version)`. Immutable once published. |
+| `gates` | One physical way in. Points at a flow, carries its own QR token (hashed, plus the clear value for reprinting a counter card), a `kind` (qr, desk, turnstile, kiosk), a `config` jsonb for per-gate options, and a status of active or revoked. |
+| `entitlements` | The thing that grants entry, if anything: booking, ticket, slot, permit, membership or event. The guest link is nullable, because a reservation exists before anyone knows who the guest is. `ref` is unique per venue and kind. Kind-specific detail nothing queries by sits in `data`. |
+| `entry_sessions` | One guest's walk through a flow. Holds the cursor (an index into the steps), `state`, an append-only `trail` of what each step did and when, and a `version` that guards against two requests saving at once. Status: in_progress, waiting, done, rejected, expired, revoked. |
+| `entries` | The audit record that someone got in. `guest_id` is nullable so erasure can tombstone a guest without deleting a record with a retention period, and so an open venue can record a count without a person. A unique idempotency key stops a double tap admitting twice. |
 
-### Property domain
+### Hotel tables (`hotel_`)
 
-```sql
-CREATE TABLE venues (
-  id          uuid PRIMARY KEY DEFAULT uuid_v7(),
-  operator_id uuid,                        -- chain, housing society, trust
-  kind        text NOT NULL DEFAULT 'hotel'
-              CHECK (kind IN ('hotel','apartment','temple','station','office','other')),
-  name        text NOT NULL,
-  timezone    text NOT NULL,               -- check-in cutoffs are local time
-  address     jsonb NOT NULL,
-  created_at  timestamptz NOT NULL DEFAULT now()
-);
+| Table | Purpose |
+| --- | --- |
+| `hotel_rooms` | Rooms at a venue. `(venue_id, number)` is unique. |
+| `hotel_bookings` | What a booking adds to an entitlement: guest name as booked, arrival and departure dates, party size, rooms requested, stay status. Shares its id with the entitlement row. |
+| `hotel_booking_rooms` | The rooms a booking actually holds. A row per room, because a party can take two. The only record of which rooms are given out. |
+| `hotel_entry_details` | What an arrival adds to an entry: which room, the journey (returning, newDevice, firstTime, desk), nights, party size. |
 
-CREATE TABLE rooms (
-  id          uuid PRIMARY KEY DEFAULT uuid_v7(),
-  venue_id    uuid NOT NULL REFERENCES venues(id),
-  number      text NOT NULL,
-  room_type   text,
-  UNIQUE (venue_id, number)
-);
+## How a hotel check-in writes
 
-CREATE TABLE bookings (
-  id              uuid PRIMARY KEY DEFAULT uuid_v7(),
-  venue_id        uuid NOT NULL REFERENCES venues(id),
-  booking_ref     text NOT NULL,           -- what the PMS calls it
-  pms_ref         text,
-  guest_name      text NOT NULL,           -- as booked; may not match identity
-  guest_id        uuid REFERENCES guests(id),  -- linked at first check-in
-  room_id         uuid REFERENCES rooms(id),
-  arrival_date    date NOT NULL,
-  departure_date  date NOT NULL,
-  status          text NOT NULL
-                  CHECK (status IN ('confirmed','checked_in','checked_out','cancelled')),
-  created_at      timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (venue_id, booking_ref)
-);
+1. Guest scans the gate QR. The server finds the gate and creates an `entry_sessions` row on the gate's flow version.
+2. The runner walks the steps: `identify`, `match_booking`, `admit`. A step that finishes instantly costs no extra write.
+3. `admit` writes the `entries` row, its `hotel_entry_details`, marks the booking, and closes the session, all in one transaction.
 
-CREATE INDEX bookings_arrivals ON bookings (venue_id, arrival_date)
-  WHERE status = 'confirmed';
-```
+That is one write per guest when nothing waits, two when a step has to wait (an approval, a payment).
 
-`guest_id` nullable on `bookings` is deliberate: the reservation exists before
-anyone knows who ChqIn thinks the guest is. Filling it in *is* the new-device
-recovery step.
+## Rules that hold everywhere
 
-```sql
--- What a QR code resolves to. Short-lived, single-use, never guessable.
-CREATE TABLE checkin_sessions (
-  id              uuid PRIMARY KEY DEFAULT uuid_v7(),
-  venue_id        uuid NOT NULL REFERENCES venues(id),
-  booking_id      uuid REFERENCES bookings(id),  -- NULL for a desk/lobby QR
-  token_hash      bytea NOT NULL,          -- hash, so a DB leak isn't a key ring
-  kind            text NOT NULL CHECK (kind IN ('desk','booking','kiosk')),
-  status          text NOT NULL DEFAULT 'open'
-                  CHECK (status IN ('open','consumed','expired','revoked')),
-  expires_at      timestamptz NOT NULL,
-  consumed_at     timestamptz,
-  created_at      timestamptz NOT NULL DEFAULT now()
-);
+- **Admit is atomic.** The entry, the entitlement update and the session close commit together or not at all.
+- **No external calls inside a transaction.** WhatsApp, payments and similar go through an outbox when they arrive.
+- **Published flows never change.** A session is pinned to the row it started on. Changing a flow means publishing version N+1.
+- **Every venue-scoped query filters by `venue_id`.** A session's venue comes from its gate, and booking lookups use the session's venue. A guest cannot reach another venue's bookings.
+- **Concurrent saves are safe.** A session save is `UPDATE … WHERE id = $1 AND version = $2`. The loser re-reads and re-runs.
 
-CREATE UNIQUE INDEX checkin_sessions_token ON checkin_sessions (token_hash);
-CREATE INDEX checkin_sessions_open ON checkin_sessions (venue_id, expires_at)
-  WHERE status = 'open';
-```
+## Growth plan
 
-A permanent QR printed on a desk card is a `kind='desk'` session template that
-mints short-lived child sessions on scan — the printed code identifies the
-property, not the check-in. Design for that now; it's the difference between
-reprinting cards and not.
-
-### The join, and the log
-
-```sql
-CREATE TABLE checkins (
-  id              uuid PRIMARY KEY DEFAULT uuid_v7(),
-  venue_id        uuid NOT NULL REFERENCES venues(id),
-  booking_id      uuid NOT NULL REFERENCES bookings(id),
-  guest_id        uuid NOT NULL REFERENCES guests(id),
-  session_id      uuid REFERENCES checkin_sessions(id),
-  credential_id   uuid REFERENCES credentials(id),   -- NULL on a desk override
-  journey         text NOT NULL CHECK (journey IN ('returning','new_device','first_time','desk')),
-  room_id         uuid REFERENCES rooms(id),
-  idempotency_key text,
-  checked_in_at   timestamptz NOT NULL DEFAULT now()
-);
-
--- A double-tapped button must not produce two check-ins.
-CREATE UNIQUE INDEX checkins_idempotency ON checkins (booking_id, idempotency_key)
-  WHERE idempotency_key IS NOT NULL;
-
--- Append-only. Every ceremony, success or failure.
-CREATE TABLE auth_events (
-  id              uuid DEFAULT uuid_v7(),
-  occurred_at     timestamptz NOT NULL DEFAULT now(),
-  guest_id        uuid,
-  credential_id   uuid,
-  venue_id        uuid,
-  event           text NOT NULL,     -- 'register','assert','assert_failed','revoke'
-  outcome         text NOT NULL,
-  detail          jsonb,
-  ip              inet,
-  user_agent      text,
-  PRIMARY KEY (occurred_at, id)
-) PARTITION BY RANGE (occurred_at);
-```
-
-No foreign keys on `auth_events` on purpose — it must still record an attempt
-against a credential that was just deleted, and it must never block a write on
-a lock in another table.
-
-### Ephemeral, in Redis
-
-```
-chqin:chal:{challenge_id}  → {purpose, guest_id?, session_id, origin}   TTL 120s
-chqin:qr:{token}           → {session_id}                               TTL 300s
-chqin:rl:{ip}:{route}      → counter                                    TTL 60s
-```
-
-Challenges **must** be single-use — delete on read, and treat a miss as a
-failed ceremony. Putting these in Postgres works at small scale but makes your
-highest-write table the one full of rows that die in two minutes.
-
-## Growth plan, in the order you'll actually need it
+These stages are estimates, not measurements. Measure before adding each one.
 
 | Stage | Trigger | Move |
 | --- | --- | --- |
-| 1 | Launch | One Postgres primary, one replica, Redis, daily PITR backups |
-| 2 | `auth_events` > ~50M rows | Monthly range partitions + detach-and-archive to object storage |
-| 3 | Desk console slows check-ins | Route all staff/reporting reads to the replica |
-| 4 | Reporting queries hurt OLTP | CDC (Debezium/logical replication) → ClickHouse or BigQuery. Never analytics on the primary |
-| 5 | > ~5k writes/s sustained | Split identity service from stay service; two clusters, no cross-DB joins |
-| 6 | Multi-region latency or data residency | Partition *by property region*; guests replicate globally read-only, stays stay local |
+| 1 | Launch | One Postgres primary, backups, indexes as they are. |
+| 2 | `auth_events` or `entries` grows large | Monthly range partitions through a hand-written migration (Drizzle cannot express `PARTITION BY`). Detach and archive old months. |
+| 3 | Dashboard reads slow the guest path | Send staff and reporting reads to a replica. |
+| 4 | Reporting hurts OLTP | Stream changes to an analytics store. Never run analytics on the primary. |
+| 5 | Sessions or challenges become the hottest write | Move them to Redis with a TTL. |
+| 6 | Very high sustained writes, or data residency | Split identity from entries into two clusters. Shard venue data by `venue_id`, never by `guest_id`, since one guest appears at many venues. |
 
-Stage 5 is the one the schema above buys you. If identity and stay are already
-FK-free across the boundary, it's a migration; if not, it's a rewrite.
+## Privacy and retention
 
-Two partitioning notes for stage 6: shard property data on `venue_id` (never on
-`guest_id` — a guest legitimately appears in many properties), and expect
-`guests` to be the small, hot, globally-replicated table. That asymmetry is
-normal and fine: identity is small and read-mostly, stays are large and
-write-mostly.
+- **Never store biometrics.** The passkey public key is the only credential artifact. It is not secret, but it is a cross-venue identifier, so treat it as personal data.
+- **Encrypt what identifies.** Contact details are encrypted; lookups use keyed hashes.
+- **Do not keep ID images.** Keep the result, the hashed identifier, and the last four digits.
+- **Open venues need not record people.** An open gate can skip `identify` and record a count only. A database of which named person entered which temple on which day is a movement-tracking system regardless of intent.
+- **Erasure is not deletion of the record.** Deleting an account clears the guest and cascades their credentials, but entries have a statutory retention period. `entries.guest_id` is set to null (a tombstone) rather than deleting the row.
+- **Local registers are regulated.** India has hotel-register rules and Form C reporting for foreign nationals. Confirm specifics for your jurisdiction and add a `regulatory_filings` table when needed. Do not bolt it onto `entries`.
 
-## Privacy and retention — schema-level, not policy-level
+## Not built yet
 
-- **Never store biometrics.** No face templates, no fingerprints. The public
-  key is the only credential artifact, and it isn't a secret — but it *is* a
-  cross-property identifier, so treat it as personal data.
-- **Encrypt what identifies.** Envelope encryption on contact details and any
-  document reference; a stolen backup should yield hashes, not a guest list.
-- **Prefer not retaining ID images at all.** If regulation forces it, put them
-  in object storage with a lifecycle rule and store only `artifact_uri` — so
-  expiry is a bucket policy, not a delete script someone forgets to run.
-- **Separate erasure from retention.** "Delete my account" clears `guests` and
-  cascades `credentials`, but stay records usually have a statutory retention
-  period. Anonymize `checkins.guest_id` to a tombstone rather than deleting the
-  row, or you'll fail an audit.
-- **Guest registers are regulated locally** — India, for instance, has both
-  hotel-register rules and Form C reporting for foreign nationals. Confirm the
-  specifics for your jurisdiction, then add a `regulatory_filings` table; don't
-  bolt it onto `checkins`.
-
-## What not to build yet
-
-Staff accounts and RBAC, loyalty, payments, room keys, multi-guest bookings,
-PMS sync. Each is a real table eventually; none is needed to replace
-localStorage, and each one added now is schema you'll migrate before it has a
-user.
-
-The exception worth pre-empting: **multi-guest bookings**. Two people sharing
-a room both check in. Modelling `checkins` per *guest* rather than per booking
-— as above — means that costs you a row, not a migration.
+Payments, loyalty, room keys, PMS sync, WhatsApp, and the other verticals' tables (`ticket_`, `slot_`, `permit_`, `event_`). Each arrives with its first real venue.

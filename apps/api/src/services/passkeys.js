@@ -9,7 +9,7 @@ import { cose, decodeCredentialPublicKey } from '@simplewebauthn/server/helpers'
 import { config } from '../config.js'
 import { db, transaction } from '../db/client.js'
 import {
-  bookings,
+  entitlements,
   credentials,
   guests,
   identityVerifications,
@@ -169,9 +169,9 @@ async function materialiseGuest(tx, challenge, session) {
 
   if (session.bookingId) {
     await tx
-      .update(bookings)
+      .update(entitlements)
       .set({ guestId: guest.id })
-      .where(and(eq(bookings.id, session.bookingId), isNull(bookings.guestId)))
+      .where(and(eq(entitlements.id, session.bookingId), isNull(entitlements.guestId)))
   }
 
   // The identity check happened before this guest existed — it was recorded

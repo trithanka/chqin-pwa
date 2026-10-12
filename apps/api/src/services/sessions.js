@@ -1,53 +1,73 @@
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { config } from '../config.js'
 import { db } from '../db/client.js'
-import { bookingRooms, bookings, checkinSessions, venues, rooms } from '../db/schema/index.js'
+import {
+  entitlements,
+  entrySessions,
+  gates,
+  hotelBookingRooms,
+  hotelBookings,
+  hotelRooms,
+  venues,
+} from '../db/schema/index.js'
 import { newSessionToken, tokenHash } from '../lib/crypto.js'
 import { conflict, notFound } from '../lib/errors.js'
 
 /**
- * Check-in sessions: what a scanned QR resolves to, and the only thing that
+ * Entry sessions: what a scanned QR resolves to, and the only thing that
  * carries a guest's identity between requests.
+ *
+ * Property names here (`bookingId`, `bookingGuestId`…) are the ones the guest
+ * routes already use, so the rows underneath could move to the entry engine
+ * without those routes noticing. `bookingId` is the session's entitlement.
  */
 
-/** Session joined to its hotel and booking, whatever state it's in. */
+const OPEN = ['in_progress', 'waiting']
+
+/** Every write to a session bumps its version, so a stale save can be refused. */
+export const touch = () => ({ version: sql`${entrySessions.version} + 1`, updatedAt: new Date() })
+
+/** Session joined to its venue and booking, whatever state it's in. */
 export async function loadAny(sessionId) {
   const [row] = await db
     .select({
-      id: checkinSessions.id,
-      venueId: checkinSessions.venueId,
-      bookingId: checkinSessions.bookingId,
-      guestId: checkinSessions.guestId,
-      status: checkinSessions.status,
-      journey: checkinSessions.journey,
-      expiresAt: checkinSessions.expiresAt,
+      id: entrySessions.id,
+      venueId: entrySessions.venueId,
+      gateId: entrySessions.gateId,
+      flowId: entrySessions.flowId,
+      bookingId: entrySessions.entitlementId,
+      guestId: entrySessions.guestId,
+      status: entrySessions.status,
+      journey: sql`${entrySessions.state}->>'journey'`,
+      expiresAt: entrySessions.expiresAt,
       venueName: venues.name,
       venueKind: venues.kind,
       venueLocation: venues.location,
       // What the property offers, collected at onboarding. Only reaches a
       // guest who has finished checking in — see services/checkins.js.
       venueSettings: venues.settings,
-      bookingRef: bookings.bookingRef,
-      bookingGuestName: bookings.guestName,
-      bookingGuestId: bookings.guestId,
-      arrivalDate: bookings.arrivalDate,
-      departureDate: bookings.departureDate,
-      roomNumber: rooms.number,
+      bookingRef: entitlements.ref,
+      bookingGuestName: hotelBookings.guestName,
+      bookingGuestId: entitlements.guestId,
+      arrivalDate: hotelBookings.arrivalDate,
+      departureDate: hotelBookings.departureDate,
+      roomNumber: hotelRooms.number,
     })
-    .from(checkinSessions)
-    .innerJoin(venues, eq(venues.id, checkinSessions.venueId))
-    .leftJoin(bookings, eq(bookings.id, checkinSessions.bookingId))
+    .from(entrySessions)
+    .innerJoin(venues, eq(venues.id, entrySessions.venueId))
+    .leftJoin(entitlements, eq(entitlements.id, entrySessions.entitlementId))
+    .leftJoin(hotelBookings, eq(hotelBookings.entitlementId, entitlements.id))
     // Through the join table: a booking can hold more than one room, and the
     // guest looking at their own session wants the one they were given.
-    .leftJoin(bookingRooms, eq(bookingRooms.bookingId, bookings.id))
-    .leftJoin(rooms, eq(rooms.id, bookingRooms.roomId))
-    .where(eq(checkinSessions.id, sessionId))
+    .leftJoin(hotelBookingRooms, eq(hotelBookingRooms.bookingId, hotelBookings.entitlementId))
+    .leftJoin(hotelRooms, eq(hotelRooms.id, hotelBookingRooms.roomId))
+    .where(eq(entrySessions.id, sessionId))
     .limit(1)
 
   return row ?? null
 }
 
-export const isOpen = (session) => session.status === 'open' && session.expiresAt >= new Date()
+export const isOpen = (session) => OPEN.includes(session.status) && session.expiresAt >= new Date()
 
 /** Session that is still open and unexpired, or null. */
 export async function loadOpen(sessionId) {
@@ -78,40 +98,46 @@ export const toPayload = (s) => ({
 })
 
 /**
- * Resolve a scanned token. A 'desk' QR is long-lived and mints a short-lived
- * child per scan; anything else is single-use and must still be open.
+ * Resolve a scanned token. A gate's QR is long-lived and mints a short-lived
+ * session per scan; a session's own token (a booking QR) is single-use and must
+ * still be open.
  */
 export async function resolveToken(token) {
-  const [parent] = await db
-    .select()
-    .from(checkinSessions)
-    .where(eq(checkinSessions.tokenHash, tokenHash(token)))
+  const hash = tokenHash(token)
+
+  const [gate] = await db
+    .select({ id: gates.id, venueId: gates.venueId, flowId: gates.flowId })
+    .from(gates)
+    .where(and(eq(gates.tokenHash, hash), eq(gates.status, 'active')))
     .limit(1)
 
-  if (!parent || parent.status === 'revoked' || parent.expiresAt < new Date()) {
+  if (gate) {
+    const [session] = await db
+      .insert(entrySessions)
+      .values({
+        venueId: gate.venueId,
+        gateId: gate.id,
+        flowId: gate.flowId,
+        tokenHash: tokenHash(newSessionToken()),
+        expiresAt: new Date(Date.now() + config.SESSION_TTL_MS),
+      })
+      .returning({ id: entrySessions.id })
+    return loadAny(session.id)
+  }
+
+  const [own] = await db
+    .select({ id: entrySessions.id, status: entrySessions.status, expiresAt: entrySessions.expiresAt })
+    .from(entrySessions)
+    .where(eq(entrySessions.tokenHash, hash))
+    .limit(1)
+
+  if (!own || own.status === 'revoked' || own.expiresAt < new Date()) {
     throw notFound('This QR code is not valid any more.')
   }
-
-  if (parent.kind !== 'desk') {
-    if (parent.status !== 'open') {
-      throw conflict('session_used', 'This QR code has already been used.')
-    }
-    return loadAny(parent.id)
+  if (!OPEN.includes(own.status)) {
+    throw conflict('session_used', 'This QR code has already been used.')
   }
-
-  const [child] = await db
-    .insert(checkinSessions)
-    .values({
-      venueId: parent.venueId,
-      bookingId: parent.bookingId,
-      parentId: parent.id,
-      tokenHash: tokenHash(newSessionToken()),
-      kind: 'kiosk',
-      expiresAt: new Date(Date.now() + config.SESSION_TTL_MS),
-    })
-    .returning({ id: checkinSessions.id })
-
-  return loadAny(child.id)
+  return loadAny(own.id)
 }
 
 /**
@@ -133,23 +159,24 @@ export async function attachBookingByLookup(session, lookup) {
 
   const candidates = await db
     .select({
-      id: bookings.id,
-      reference: bookings.bookingRef,
-      guestName: bookings.guestName,
-      roomNumber: rooms.number,
-      arrivalDate: bookings.arrivalDate,
-      departureDate: bookings.departureDate,
+      id: entitlements.id,
+      reference: entitlements.ref,
+      guestName: hotelBookings.guestName,
+      roomNumber: hotelRooms.number,
+      arrivalDate: hotelBookings.arrivalDate,
+      departureDate: hotelBookings.departureDate,
     })
-    .from(bookings)
-    .leftJoin(bookingRooms, eq(bookingRooms.bookingId, bookings.id))
-    .leftJoin(rooms, eq(rooms.id, bookingRooms.roomId))
+    .from(entitlements)
+    .innerJoin(hotelBookings, eq(hotelBookings.entitlementId, entitlements.id))
+    .leftJoin(hotelBookingRooms, eq(hotelBookingRooms.bookingId, hotelBookings.entitlementId))
+    .leftJoin(hotelRooms, eq(hotelRooms.id, hotelBookingRooms.roomId))
     .where(
       and(
-        eq(bookings.venueId, session.venueId),
-        eq(bookings.status, 'confirmed'),
-        sql`${bookings.arrivalDate} = CURRENT_DATE`,
-        sql`(lower(${bookings.bookingRef}) = lower(${term})
-             OR lower(${bookings.guestName}) LIKE lower(${'%' + term}))`,
+        eq(entitlements.venueId, session.venueId),
+        eq(hotelBookings.status, 'confirmed'),
+        sql`${hotelBookings.arrivalDate} = CURRENT_DATE`,
+        sql`(lower(${entitlements.ref}) = lower(${term})
+             OR lower(${hotelBookings.guestName}) LIKE lower(${'%' + term}))`,
       ),
     )
     .limit(5)
@@ -166,16 +193,16 @@ export async function attachBookingByLookup(session, lookup) {
 
   const booking = candidates[0]
   await db
-    .update(checkinSessions)
-    .set({ bookingId: booking.id })
-    .where(eq(checkinSessions.id, session.id))
+    .update(entrySessions)
+    .set({ entitlementId: booking.id, ...touch() })
+    .where(eq(entrySessions.id, session.id))
 
   return booking
 }
 
 /** Records who the session belongs to. Only a verified ceremony may call this. */
 export const bindGuest = (tx, sessionId, guestId) =>
-  tx.update(checkinSessions).set({ guestId }).where(eq(checkinSessions.id, sessionId))
+  tx.update(entrySessions).set({ guestId, ...touch() }).where(eq(entrySessions.id, sessionId))
 
 /**
  * A desk QR carries no reservation — it identifies the property. Once a
@@ -187,23 +214,24 @@ export async function attachBooking(tx, session, guestId) {
   if (session.bookingId) return session.bookingId
 
   const [booking] = await tx
-    .select({ id: bookings.id })
-    .from(bookings)
+    .select({ id: entitlements.id })
+    .from(entitlements)
+    .innerJoin(hotelBookings, eq(hotelBookings.entitlementId, entitlements.id))
     .where(
       and(
-        eq(bookings.venueId, session.venueId),
-        eq(bookings.guestId, guestId),
-        eq(bookings.status, 'confirmed'),
-        sql`${bookings.arrivalDate} = CURRENT_DATE`,
+        eq(entitlements.venueId, session.venueId),
+        eq(entitlements.guestId, guestId),
+        eq(hotelBookings.status, 'confirmed'),
+        sql`${hotelBookings.arrivalDate} = CURRENT_DATE`,
       ),
     )
-    .orderBy(bookings.createdAt)
+    .orderBy(entitlements.createdAt)
     .limit(1)
 
   if (!booking) return null
   await tx
-    .update(checkinSessions)
-    .set({ bookingId: booking.id })
-    .where(and(eq(checkinSessions.id, session.id), isNull(checkinSessions.bookingId)))
+    .update(entrySessions)
+    .set({ entitlementId: booking.id, ...touch() })
+    .where(and(eq(entrySessions.id, session.id), isNull(entrySessions.entitlementId)))
   return booking.id
 }

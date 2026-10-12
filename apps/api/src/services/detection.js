@@ -1,6 +1,6 @@
-import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '../db/client.js'
-import { checkinSessions, credentials, guests } from '../db/schema/index.js'
+import { credentials, entrySessions, guests } from '../db/schema/index.js'
 
 /**
  * Which journey the guest is in. The guest never picks — this decides, from
@@ -44,8 +44,15 @@ export async function decideJourney(session, knownCredentialIds) {
 }
 
 /**
- * Recorded on the session, because enrolment sets `bookings.guestId` — so
+ * Recorded on the session, because enrolment sets the booking's guest — so
  * recomputing at check-in time would report a first-time guest as returning.
  */
 export const recordJourney = (sessionId, journey) =>
-  db.update(checkinSessions).set({ journey }).where(eq(checkinSessions.id, sessionId))
+  db
+    .update(entrySessions)
+    .set({
+      state: sql`${entrySessions.state} || ${JSON.stringify({ journey })}::jsonb`,
+      version: sql`${entrySessions.version} + 1`,
+      updatedAt: new Date(),
+    })
+    .where(eq(entrySessions.id, sessionId))

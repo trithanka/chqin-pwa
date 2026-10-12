@@ -6,14 +6,16 @@
  * data model depends on is visible in the file tree:
  *
  *   identity.js — guests, credentials, KYC events   (global)
- *   property.js — venues, rooms, bookings, sessions (tenanted by venue)
- *   checkin.js  — the join between them
+ *   property.js — venues (tenanted by venue)
+ *   entry.js    — gates, flows, sessions, entitlements, entries (the engine)
+ *   hotel.js    — rooms, bookings, arrivals: what only a hotel gate needs
  *   staff.js    — the people who run a venue (not the guests)
  *   auth.js     — challenges and the audit log
  */
 
 export * from './identity.js'
 export * from './property.js'
-export * from './checkin.js'
+export * from './entry.js'
+export * from './hotel.js'
 export * from './staff.js'
 export * from './auth.js'

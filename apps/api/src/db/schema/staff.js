@@ -121,7 +121,7 @@ export const staffMemberships = pgTable(
   },
   (table) => [
     uniqueIndex('staff_memberships_unique').on(table.staffId, table.venueId),
-    check('staff_memberships_role', sql`${table.role} IN ('owner','manager','frontdesk')`),
+    check('staff_memberships_role', sql`${table.role} IN ('owner','manager','frontdesk','approver')`),
   ],
 )
 
