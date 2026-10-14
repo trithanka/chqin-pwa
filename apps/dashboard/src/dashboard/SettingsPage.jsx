@@ -238,6 +238,7 @@ export default function SettingsPage() {
         {(tab === 'all' || tab === 'rooms') && <RoomsPanel />}
         {(tab === 'all' || tab === 'services' || tab === 'essentials') && (
           <div className="space-y-7">
+            {(tab === 'all' || tab === 'services') && <ReceptionPanel />}
             {(tab === 'all' || tab === 'services') && <GuestServicesPanel />}
             {(tab === 'all' || tab === 'essentials') && <StayEssentialsPanel />}
           </div>
@@ -787,6 +788,87 @@ const to10Digits = (phone) => {
 const toApiPhone = (digits) => {
   const clean = (digits ?? '').replace(/\D/g, '').slice(0, 10)
   return clean ? `+91 ${clean}` : ''
+}
+
+/** Where the front desk hears about each check-in, on WhatsApp. Its own endpoint,
+ *  so saving it cannot overwrite what the other panels hold. */
+function ReceptionPanel() {
+  const { data, error, loading, reload } = useApi(() => api.get('/staff/reception'))
+  return (
+    <Async loading={loading} error={error} onRetry={reload}>
+      {data && <ReceptionForm initial={data.reception} />}
+    </Async>
+  )
+}
+
+function ReceptionForm({ initial }) {
+  const [digits, setDigits] = useState(to10Digits(initial))
+  const [saved, setSaved] = useSavedFlag()
+  const [saving, setSaving] = useState(false)
+  const [failure, setFailure] = useState(null)
+  const [base, setBase] = useState(to10Digits(initial))
+
+  const invalid = digits.length > 0 && digits.length !== 10
+  const dirty = digits !== base
+
+  const save = async () => {
+    if (invalid) return
+    setSaving(true)
+    setFailure(null)
+    try {
+      const next = await api.post('/staff/reception', { reception: digits ? toApiPhone(digits) : null })
+      setBase(to10Digits(next.reception))
+      setSaved(true)
+    } catch (err) {
+      setFailure(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Section
+      icon={MessageSquare}
+      title="Reception WhatsApp"
+      description="Each time a guest checks in, this number gets a WhatsApp message with their name and room. Leave it empty to turn that off."
+      dirty={dirty}
+      saving={saving}
+      saved={saved}
+      failure={failure}
+      onSave={save}
+      disabled={invalid}
+      saveLabel="Save number"
+    >
+      <div className="max-w-sm">
+        <label className="mb-1.5 block text-[12px] font-semibold text-slate-700">Reception number</label>
+        <div
+          className={`flex items-center rounded-xl border bg-white overflow-hidden ${
+            invalid ? 'border-red-300' : 'border-slate-200 focus-within:border-brand focus-within:ring-4 focus-within:ring-brand/10'
+          }`}
+        >
+          <div className="flex items-center gap-1.5 px-3 py-2 bg-slate-50 border-r border-slate-200 text-slate-700 text-[13px] font-bold select-none shrink-0">
+            <MessageSquare size={14} className="text-emerald-600" />
+            <span>+91</span>
+          </div>
+          <input
+            type="tel"
+            inputMode="numeric"
+            value={digits}
+            onChange={(e) => {
+              setSaved(false)
+              setDigits(e.target.value.replace(/\D/g, '').slice(0, 10))
+            }}
+            placeholder="9876543210"
+            aria-label="Reception 10-digit WhatsApp number"
+            className="h-10 w-full bg-transparent px-3 text-[14px] font-semibold text-slate-900 placeholder:text-slate-400 placeholder:font-normal focus:outline-none tabular-nums tracking-wide"
+          />
+        </div>
+        {invalid && (
+          <p className="mt-1.5 text-[11.5px] font-medium text-red-600">Please enter all 10 digits ({digits.length}/10).</p>
+        )}
+      </div>
+    </Section>
+  )
 }
 
 function GuestServicesPanel() {

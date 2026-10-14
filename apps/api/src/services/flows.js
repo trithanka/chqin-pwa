@@ -22,10 +22,43 @@ export function validateFlow(steps, known = knownStepTypes) {
     if (when !== undefined && (typeof when !== 'object' || when === null || Array.isArray(when))) {
       throw new Error(`step ${i}: "when" must be a plain object`)
     }
+    // A value, or a list meaning "any of these". Anything else never matches
+    // and silently skips the step, which is worse than refusing to publish.
+    for (const [key, value] of Object.entries(when ?? {})) {
+      const values = Array.isArray(value) ? value : [value]
+      if (!values.length || !values.every((v) => ['string', 'number', 'boolean'].includes(typeof v))) {
+        throw new Error(`step ${i}: "when.${key}" must be a value or a list of values`)
+      }
+    }
+    if (step.type === 'collect_details') validateFields(step.fields, i)
   })
   if (steps.at(-1).type !== 'admit') throw new Error('a flow must end with "admit"')
   if (steps.at(-1).when) throw new Error('"admit" cannot be conditional')
   return steps
+}
+
+/** collect_details' form: keys a later `when` can read, and choices that have something to choose. */
+function validateFields(fields, i) {
+  if (!Array.isArray(fields) || !fields.length) throw new Error(`step ${i}: collect_details needs a "fields" list`)
+  const keys = new Set()
+  for (const field of fields) {
+    if (typeof field?.key !== 'string' || !/^[a-zA-Z][\w]*$/.test(field.key)) {
+      throw new Error(`step ${i}: every field needs a "key" (letters, digits, underscore)`)
+    }
+    if (keys.has(field.key)) throw new Error(`step ${i}: field "${field.key}" appears twice`)
+    keys.add(field.key)
+    const kind = field.kind ?? 'text'
+    if (!['text', 'choice'].includes(kind)) throw new Error(`step ${i}: field "${field.key}" kind must be "text" or "choice"`)
+    if (kind === 'choice') {
+      const listed = Array.isArray(field.options) && field.options.length > 0
+      if (!listed && typeof field.source !== 'string') {
+        throw new Error(`step ${i}: choice "${field.key}" needs "options" or a "source"`)
+      }
+      if (listed && !field.options.every((o) => typeof o === 'string' || (typeof o?.value === 'string' && o.value))) {
+        throw new Error(`step ${i}: choice "${field.key}" options must be strings or { value, label }`)
+      }
+    }
+  }
 }
 
 // Published flows never change, so a row can be kept for the life of the process.
@@ -56,3 +89,10 @@ export async function latestFlowId(key, exec = db) {
   if (!row) throw new Error(`no published flow "${key}"`)
   return row.id
 }
+
+/**
+ * Which flow a new venue's first gate runs. Kinds not listed fall back to the
+ * hotel flow, which is what every venue ran before there was a choice.
+ */
+const FLOW_BY_KIND = { office: 'visitor.host_approval' }
+export const flowKeyFor = (kind) => FLOW_BY_KIND[kind] ?? 'hotel'

@@ -59,6 +59,8 @@ export const guests = pgTable(
   // Enumerations live in the database, not only in a comment: an unexpected
   // value should fail the write, not surface later as a journey nobody handles.
   (table) => [
+    // Admin search by name: a prefix match on the lower-cased name.
+    index('guests_name_prefix').using('btree', sql`lower(${table.displayName}) text_pattern_ops`),
     check('guests_status', sql`${table.status} IN ('active','suspended','erased')`),
     check(
       'guests_gender',
@@ -137,9 +139,10 @@ export const identityVerifications = pgTable(
   },
   (table) => [
     index('identity_verifications_guest').on(table.guestId, table.createdAt),
+    index('identity_verifications_session').on(table.sessionId),
     check(
       'identity_verifications_method',
-      sql`${table.method} IN ('document','manual_desk','simulated','aadhaar_otp')`,
+      sql`${table.method} IN ('document','manual_desk','simulated','aadhaar_otp','basic')`,
     ),
     check('identity_verifications_result', sql`${table.result} IN ('passed','failed','manual_review')`),
   ],

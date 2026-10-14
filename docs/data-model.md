@@ -14,6 +14,8 @@ How the database is laid out, and why. The source of truth is `apps/api/src/db/s
 
 IDs are UUIDv7 generated in Node (`lib/ids.js`), never by a database default. Time-ordered ids keep index inserts append-only without exposing a countable sequence. Tokens are stored as SHA-256 hashes, so a database leak is not a set of working keys.
 
+The full table-and-relationship diagram is in [database-diagram.md](database-diagram.md).
+
 ## The structural decision
 
 **Guests are global. Venues and entries are per-place.**
@@ -61,6 +63,19 @@ No prefix means any kind of gate can use the table. A prefix means it belongs to
 | `venues` | Anywhere someone arrives. `kind` is hotel, apartment, temple, station, office, monument, park, museum, event or other. `settings` (jsonb) holds what onboarding collected: services, guest-facing essentials, business registration, per-service contacts. `retention_days` sets how long entry history is kept. |
 | `staff_users`, `staff_memberships`, `staff_sessions`, `staff_tokens` | Dashboard accounts, their role at a venue, revocable server-side sessions, and one-time email and reset tokens. |
 
+`venues.status` is `active`, `suspended` or `closed`, set only by ChqIn Admin. A suspended venue's gates refuse scans and its staff cannot sign in. A closed venue is what deleting a venue with history leaves behind.
+
+### ChqIn Admin (the platform team)
+
+These tables belong to the ChqIn team, not to any venue. They are kept apart from `staff_*` on purpose, so one side's session can never be read as the other's. See [admin-panel.md](admin-panel.md).
+
+| Table | Purpose |
+| --- | --- |
+| `admin_users` | An admin account. The email is stored keyed-hashed and encrypted. Password (scrypt), role (`owner`, `support` or `read_only`), status (`invited`, `active` or `disabled`), and a TOTP secret encrypted with `ENCRYPTION_KEY`. `totp_last_step` stops a code from working twice. |
+| `admin_sessions` | Revocable server-side sessions. The token is stored as a SHA-256 hash. `mfa_at` stays null until the TOTP code is accepted. They expire after 30 minutes idle or 8 hours in total. |
+| `admin_tokens` | Single-use invite and 2FA-reset links, stored hashed. |
+| `admin_audit_log` | Append-only, with no foreign keys (the same reasoning as `auth_events`). Each row records who did it, their role, the action, the target, the venue, the reason, the before and after values of changed fields, the IP and the user agent. It is written in the same transaction as the change it describes. |
+
 ### The entry engine (any gate)
 
 | Table | Purpose |
@@ -70,6 +85,20 @@ No prefix means any kind of gate can use the table. A prefix means it belongs to
 | `entitlements` | The thing that grants entry, if anything: booking, ticket, slot, permit, membership or event. The guest link is nullable, because a reservation exists before anyone knows who the guest is. `ref` is unique per venue and kind. Kind-specific detail nothing queries by sits in `data`. |
 | `entry_sessions` | One guest's walk through a flow. Holds the cursor (an index into the steps), `state`, an append-only `trail` of what each step did and when, and a `version` that guards against two requests saving at once. Status: in_progress, waiting, done, rejected, expired, revoked. |
 | `entries` | The audit record that someone got in. `guest_id` is nullable so erasure can tombstone a guest without deleting a record with a retention period, and so an open venue can record a count without a person. A unique idempotency key stops a double tap admitting twice. |
+
+### Visitor and event tables (`visit_`, `event_`) and the outbox
+
+Used by any venue that hosts visitors or runs events, The Nest first. Named for the capability, not the customer.
+
+| Table | Purpose |
+| --- | --- |
+| `visit_hosts` | A person or team a visitor can ask to see, with an optional WhatsApp number. Also an event's organiser. |
+| `visit_entry_details` | What a meeting or office-work arrival adds to an entry: purpose and host. |
+| `event_events` | An event a visitor can check in to. Active or paused, with an organiser. |
+| `event_entry_details` | What an event arrival adds to an entry: event, company, designation. |
+| `outbox` | Notifications waiting to go out, for every kind of gate. Written in the same transaction as what caused them and sent by a worker afterwards. Status: pending, sent, failed, or cancelled (by an admin, so the row still says it existed). |
+
+How a venue identifies people is a setting on its gates (`gates.config.identity`): `basic` (a name and a mobile number, recorded as method `basic` and never claimed as verified) or `aadhaar`. A hotel always uses Aadhaar.
 
 ### Hotel tables (`hotel_`)
 

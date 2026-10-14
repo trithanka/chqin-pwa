@@ -47,9 +47,15 @@ export const venues = pgTable(
     settings: jsonb('settings').notNull().default({}),
     // How long entry history is kept. Null = the default for the kind.
     retentionDays: integer('retention_days'),
+    // Set by ChqIn Admin. Suspended: gates refuse scans and staff can't sign
+    // in. Closed: what "deleting" a venue with history leaves behind.
+    status: text('status').notNull().default('active'),
+    statusReason: text('status_reason'),
+    statusChangedAt: timestamp('status_changed_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    check('venues_status', sql`${table.status} IN ('active','suspended','closed')`),
     check(
       'venues_kind',
       sql`${table.kind} IN ('hotel','apartment','temple','station','office','monument','park','museum','event','other')`,

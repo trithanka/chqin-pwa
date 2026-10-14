@@ -8,6 +8,7 @@ import { body } from '../lib/validate.js'
 import { logEvent } from '../services/audit.js'
 import { requireOpen } from '../services/sessions.js'
 import {
+  recordBasicIdentity,
   recordDocumentCapture,
   requestAadhaarOtp,
   verifyAadhaarOtp,
@@ -98,6 +99,27 @@ identity.post('/aadhaar/verify', body(otpVerify), async (c) => {
     })
     throw err
   }
+})
+
+const basicRequest = z.object({
+  sessionId: z.uuid(),
+  name: z.string().trim().min(2, 'Enter your name').max(120),
+  phone: z.string().regex(/^[\d\s+()-]{10,16}$/, 'Enter your mobile number'),
+})
+
+/** For a venue that doesn't ask for Aadhaar: a name and a mobile number. */
+identity.post('/basic', body(basicRequest), async (c) => {
+  const { sessionId, name, phone } = c.get('body')
+  const session = await requireOpen(sessionId)
+  const result = await recordBasicIdentity(session, { name, phone: phone.trim() })
+  await logEvent(c, {
+    venueId: session.venueId,
+    sessionId: session.id,
+    event: 'identity_verified',
+    outcome: 'ok',
+    detail: { method: 'basic' },
+  })
+  return c.json(result)
 })
 
 /** The secondary path: a photo of the card, for the desk to review. */

@@ -1,4 +1,6 @@
+import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import OnboardingWizard from '../onboarding/OnboardingWizard'
+import KindChooser from '../onboarding/KindChooser'
 import { api } from '../api'
 import { useSession } from '../session'
 
@@ -9,6 +11,11 @@ import { useSession } from '../session'
  */
 export default function RegisterPage() {
   const { registerVenue } = useSession()
+  // The kind is in the address — /register/hotel, /register/office — so each
+  // has its own link, survives a refresh, and Back is the browser's. /register
+  // alone asks. Choosing the same kind again picks a saved draft back up.
+  const { kind } = useParams()
+  const navigate = useNavigate()
 
   /**
    * The whole wizard posts at the end, not step by step: a half-created
@@ -30,6 +37,11 @@ export default function RegisterPage() {
       },
       property: data.property,
       rooms: data.rooms,
+      ...(data.reception?.length === 10 ? { reception: `+91 ${data.reception}` } : {}),
+      hosts: (data.hosts ?? []).map((h) => ({
+        name: h.name,
+        ...(h.phone ? { phone: `+91 ${h.phone}` } : {}),
+      })),
       business: data.business,
       services: data.services,
       essentials: data.essentials,
@@ -53,5 +65,7 @@ export default function RegisterPage() {
     return api.get('/staff/checkin-code').catch(() => null)
   }
 
-  return <OnboardingWizard onComplete={submit} />
+  if (!kind) return <KindChooser onChoose={(k) => navigate(`/register/${k}`)} />
+  if (kind !== 'hotel' && kind !== 'office') return <Navigate to="/register" replace />
+  return <OnboardingWizard kind={kind} onComplete={submit} onChangeKind={() => navigate('/register')} />
 }

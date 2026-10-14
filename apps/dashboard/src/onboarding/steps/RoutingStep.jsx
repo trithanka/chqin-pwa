@@ -13,7 +13,8 @@ const to10Digits = (val) => {
 }
 
 export default function RoutingStep({ data, patch, errors }) {
-  const [reception, setReception] = useState('')
+  const reception = data.reception ?? ''
+  const setReception = (value) => patch('reception', value)
 
   const set = (service, value) => {
     patch('contacts', { ...data.contacts, [service]: to10Digits(value) })
@@ -33,7 +34,7 @@ export default function RoutingStep({ data, patch, errors }) {
       />
 
       <Card className="p-4">
-        <Field label="Reception number" hint="Fills every service below in one tap.">
+        <Field label="Reception number" hint="Gets a WhatsApp message at each check-in. Fills every service below in one tap.">
           <div className="flex items-center rounded-xl border border-white/[0.09] bg-slate-900/90 overflow-hidden focus-within:border-sky-400 focus-within:ring-1 focus-within:ring-sky-400/40 transition-all">
             <div className="flex items-center gap-1.5 px-3 py-2.5 bg-slate-800 border-r border-white/[0.08] text-slate-300 text-[13px] font-bold select-none shrink-0">
               <MessageSquare size={14} className="text-emerald-400" />

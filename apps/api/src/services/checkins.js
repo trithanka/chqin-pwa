@@ -5,6 +5,7 @@ import {
   entitlements,
   entries,
   entrySessions,
+  guests,
   hotelBookings,
   hotelEntryDetails,
   hotelRooms,
@@ -13,6 +14,8 @@ import { conflict, unauthorized } from '../lib/errors.js'
 import { advance } from './entry.js'
 import { loadFlow } from './flows.js'
 import { touch } from './sessions.js'
+import { receptionAlert } from './hotelNotify.js'
+import { enqueue } from './outbox.js'
 import { stayFrom } from './stay.js'
 
 /**
@@ -157,6 +160,21 @@ export async function checkIn(session, idempotencyKey, stay) {
       .where(and(eq(entrySessions.id, fresh.id), eq(entrySessions.version, fresh.version)))
       .returning({ id: entrySessions.id })
     if (!saved.length) throw conflict('session_changed', 'Try that again.')
+
+    // The front desk hears about it in the same transaction that admitted the
+    // guest, so a check-in that rolls back tells nobody.
+    const reception = session.venueSettings?.reception
+    if (reception) {
+      const [guest] = await tx.select({ name: guests.displayName }).from(guests).where(eq(guests.id, fresh.guestId))
+      await enqueue(tx, [
+        receptionAlert(fresh.venueId, reception, {
+          guest: guest?.name,
+          hotel: session.venueName,
+          room: session.roomNumber,
+          sessionId: fresh.id,
+        }),
+      ])
+    }
 
     const [row] = await tx
       .select({ id: entries.id, enteredAt: entries.enteredAt })

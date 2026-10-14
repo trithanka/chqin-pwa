@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Check, Copy, Clock, Coffee, LogOut, Wifi } from 'lucide-react'
-import { Card, Screen, SecondaryButton } from '../components/ui'
+import { Check, Copy, Clock, Coffee, LogOut, MessageCircle, Wifi } from 'lucide-react'
+import { BottomSheet, Card, PrimaryButton, Screen, SecondaryButton } from '../components/ui'
+import { sendServiceRequest, sendStayDetails } from '../checkin'
 import { tapped } from '../lib/haptics'
 import { SERVICE, whatsappLink } from '../services'
 
@@ -14,16 +15,18 @@ import { SERVICE, whatsappLink } from '../services'
  * services shows two tiles, and one that never set a Wi-Fi password shows no
  * Wi-Fi card.
  *
- * A tile opens WhatsApp to the number that service routes to, with the room
- * already in the message. That is the whole request mechanism today — there is
- * no in-app ordering, and pretending otherwise would be a button that does
- * nothing.
+ * A tile sends the request to the team that service routes to. Where this
+ * server sends WhatsApp (`stay.whatsapp`) it is sent from here, with an optional
+ * note; everywhere else the tile opens the guest's own WhatsApp with the room
+ * already in the message, which is what it always did.
  */
 export default function StayScreen({ checkin, session, onDone, direction }) {
   const venueName = checkin?.venueName ?? session?.venue?.name
   const roomNumber = checkin?.roomNumber ?? session?.booking?.roomNumber
 
   const services = checkin?.stay?.services ?? []
+  const sends = Boolean(checkin?.stay?.whatsapp)
+  const [asking, setAsking] = useState(null) // the service being requested
   const essentials = checkin?.stay?.essentials ?? {}
   const { wifiSsid, wifiPassword, breakfastFrom, breakfastTo, checkoutTime, notes } = essentials
 
@@ -64,14 +67,19 @@ export default function StayScreen({ checkin, session, onDone, direction }) {
                 contact={contact}
                 roomNumber={roomNumber}
                 venueName={venueName}
+                onAsk={sends ? setAsking : null}
               />
             ))}
           </div>
           <p className="mt-3 text-[12px] leading-relaxed text-slate-400">
-            Opens WhatsApp with your room already in the message.
+            {sends
+              ? 'Goes straight to the team, with your room.'
+              : 'Opens WhatsApp with your room already in the message.'}
           </p>
         </section>
       )}
+
+      {sends && <DetailsOnWhatsApp sessionId={session?.sessionId} />}
 
       {(wifiSsid || facts.length > 0) && (
         <section className="mt-7">
@@ -100,17 +108,48 @@ export default function StayScreen({ checkin, session, onDone, direction }) {
       <div className="mt-8">
         <SecondaryButton onClick={onDone}>Done</SecondaryButton>
       </div>
+
+      <RequestSheet
+        service={asking}
+        sessionId={session?.sessionId}
+        onClose={() => setAsking(null)}
+      />
     </Screen>
   )
 }
 
-function ServiceTile({ service, contact, roomNumber, venueName }) {
+function ServiceTile({ service, contact, roomNumber, venueName, onAsk }) {
   const { label, icon: Icon } = SERVICE[service] ?? {}
   const href = whatsappLink({ contact, service, roomNumber, venueName })
 
   // A number that can't be dialled gets no tile — the server already drops
   // services with no contact, so this is the malformed-number case.
   if (!label || !href) return null
+
+  const face = (
+    <>
+      <Icon size={22} strokeWidth={1.9} className="text-blue-600" />
+      <span className="text-[12.5px] font-semibold leading-tight text-slate-700">{label}</span>
+    </>
+  )
+  const tile =
+    'flex flex-col items-center gap-2 rounded-[20px] border border-slate-200/80 bg-white px-2 py-4 text-center shadow-[var(--shadow-soft)]'
+
+  if (onAsk) {
+    return (
+      <motion.button
+        type="button"
+        onClick={() => {
+          tapped()
+          onAsk(service)
+        }}
+        whileTap={{ scale: 0.97 }}
+        className={tile}
+      >
+        {face}
+      </motion.button>
+    )
+  }
 
   return (
     <motion.a
@@ -119,10 +158,9 @@ function ServiceTile({ service, contact, roomNumber, venueName }) {
       rel="noreferrer"
       onClick={tapped}
       whileTap={{ scale: 0.97 }}
-      className="flex flex-col items-center gap-2 rounded-[20px] border border-slate-200/80 bg-white px-2 py-4 text-center shadow-[var(--shadow-soft)]"
+      className={tile}
     >
-      <Icon size={22} strokeWidth={1.9} className="text-blue-600" />
-      <span className="text-[12.5px] font-semibold leading-tight text-slate-700">{label}</span>
+      {face}
     </motion.a>
   )
 }
@@ -172,6 +210,138 @@ function WifiCard({ ssid, password }) {
           ) : (
             <p className="mt-1 text-[13px] text-slate-500">Open network — no password needed.</p>
           )}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+/** A request, with an optional note, sent to the team that handles the service. */
+function RequestSheet({ service, sessionId, onClose }) {
+  const [note, setNote] = useState('')
+  const [state, setState] = useState('idle') // idle | sending | sent
+  const [error, setError] = useState(null)
+  const label = SERVICE[service]?.label
+
+  const close = () => {
+    setNote('')
+    setState('idle')
+    setError(null)
+    onClose()
+  }
+
+  const send = async () => {
+    if (state === 'sending') return
+    setState('sending')
+    setError(null)
+    try {
+      await sendServiceRequest(sessionId, service, note.trim())
+      setState('sent')
+    } catch (err) {
+      setError(err.message)
+      setState('idle')
+    }
+  }
+
+  return (
+    <BottomSheet open={Boolean(service)} onClose={close} title={label ? `${label} request` : ''}>
+      {state === 'sent' ? (
+        <div className="pb-5">
+          <p className="text-[14.5px] leading-relaxed text-slate-600">
+            Sent. The team has been messaged and will be with you shortly.
+          </p>
+          <div className="mt-4">
+            <SecondaryButton onClick={close}>Close</SecondaryButton>
+          </div>
+        </div>
+      ) : (
+        <div className="pb-5">
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            maxLength={140}
+            rows={3}
+            placeholder="Anything we should know? (optional)"
+            className="w-full resize-none rounded-2xl border border-slate-200 bg-white p-3.5 text-[16px] text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-4 focus:ring-blue-500/12"
+          />
+          {error && <p className="mt-2 text-[13px] font-medium text-red-600">{error}</p>}
+          <div className="mt-4">
+            <PrimaryButton onClick={send} loading={state === 'sending'}>
+              Send request
+            </PrimaryButton>
+          </div>
+        </div>
+      )}
+    </BottomSheet>
+  )
+}
+
+/**
+ * Stay details, and later the room, on the guest's own WhatsApp. Entirely
+ * optional: submitting a number is the opt-in, and the line under the field
+ * says what it will be used for.
+ */
+function DetailsOnWhatsApp({ sessionId }) {
+  const [digits, setDigits] = useState('')
+  const [state, setState] = useState('idle') // idle | sending | sent
+  const [error, setError] = useState(null)
+
+  const send = async () => {
+    if (digits.length !== 10 || state === 'sending') return
+    setState('sending')
+    setError(null)
+    try {
+      await sendStayDetails(sessionId, `+91 ${digits}`)
+      setState('sent')
+    } catch (err) {
+      setError(err.message)
+      setState('idle')
+    }
+  }
+
+  if (state === 'sent') {
+    return (
+      <Card className="mt-7 flex items-start gap-3 px-4 py-3.5">
+        <Check size={16} className="mt-0.5 shrink-0 text-emerald-600" strokeWidth={3} />
+        <p className="text-[14px] font-semibold text-slate-700">
+          On its way to your WhatsApp. We'll message you again when your room is ready.
+        </p>
+      </Card>
+    )
+  }
+
+  return (
+    <Card className="mt-7 px-4 py-4">
+      <div className="flex items-start gap-3">
+        <MessageCircle size={16} className="mt-0.5 shrink-0 text-slate-400" strokeWidth={2} />
+        <div className="min-w-0 flex-1">
+          <p className="text-[14.5px] font-semibold text-slate-800">Keep these details on WhatsApp</p>
+          <p className="mt-0.5 text-[12.5px] leading-relaxed text-slate-400">
+            We'll send your Wi-Fi and check-out time, and your room number when it's assigned. Nothing else.
+          </p>
+          <div className="mt-3 flex items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center overflow-hidden rounded-xl border border-slate-200 bg-white focus-within:border-blue-600">
+              <span className="border-r border-slate-200 bg-slate-50 px-2.5 py-2.5 text-[13px] font-bold text-slate-600">+91</span>
+              <input
+                type="tel"
+                inputMode="numeric"
+                value={digits}
+                onChange={(e) => setDigits(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                placeholder="9876543210"
+                aria-label="Your 10-digit WhatsApp number"
+                className="h-10 min-w-0 flex-1 bg-transparent px-2.5 text-[16px] font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={send}
+              disabled={digits.length !== 10 || state === 'sending'}
+              className="h-10 shrink-0 rounded-xl bg-blue-600 px-4 text-[13.5px] font-bold text-white disabled:opacity-40"
+            >
+              {state === 'sending' ? '…' : 'Send'}
+            </button>
+          </div>
+          {error && <p className="mt-2 text-[13px] font-medium text-red-600">{error}</p>}
         </div>
       </div>
     </Card>

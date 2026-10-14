@@ -25,7 +25,7 @@ A venue has many gates. Each gate points at one flow. A flow is made of steps.
 
 ## The step library
 
-We build these once and reuse them everywhere. Built today: Identify, Match booking and Admit. The rest are added when the first venue needs them.
+We build these once and reuse them everywhere. Built today: Identify, Match booking, Collect details, Staff approves and Admit. The rest are added when the first venue needs them.
 
 The full list:
 
@@ -57,7 +57,7 @@ And the places we already have or are building:
 | Place | The list |
 | --- | --- |
 | Hotel | Identify, Match booking, Admit |
-| The Nest | Identify, Collect details, then (meeting) Staff approves or (event) Register, then Admit |
+| The Nest (built) | Identify, Collect details (purpose), then for a meeting: Collect details (host), Staff approves; for an event: Collect details (event, company, designation); then Admit |
 
 The only "smart" thing a flow can do is skip a step with a **`when`** condition ("run this step only if the visitor picked meeting"). Two steps with different conditions give you a branch, and a guest's position stays a single number. The Nest needs it. Nothing else does yet.
 

@@ -13,6 +13,7 @@ import EssentialsStep from './steps/EssentialsStep'
 import RoutingStep from './steps/RoutingStep'
 import PreviewStep from './steps/PreviewStep'
 import LiveStep from './steps/LiveStep'
+import PeopleStep from './steps/PeopleStep'
 
 /**
  * Property onboarding & business registration.
@@ -23,7 +24,7 @@ import LiveStep from './steps/LiveStep'
  *   ambient glow backdrops, and an elevated glassmorphic card workspace.
  */
 
-const STEPS = [
+const HOTEL_STEPS = [
   { key: 'property', label: 'Property', desc: 'Name & location', Screen: PropertyStep },
   { key: 'business', label: 'Business', desc: 'GST & legal details', Screen: BusinessStep },
   { key: 'rooms', label: 'Rooms', desc: 'Inventory & categories', Screen: RoomsStep },
@@ -34,6 +35,17 @@ const STEPS = [
   { key: 'preview', label: 'Preview', desc: 'Guest experience check', Screen: PreviewStep },
   { key: 'live', label: 'Go live', desc: 'Printable reception QR', Screen: LiveStep, final: true },
 ]
+
+// A workplace, office or event space: no rooms, services or guest preview.
+const OFFICE_STEPS = [
+  { key: 'property', label: 'Place', desc: 'Name & location', Screen: PropertyStep },
+  { key: 'business', label: 'Business', desc: 'GST & legal details', Screen: BusinessStep },
+  { key: 'people', label: 'People', desc: 'Who visitors can meet', Screen: PeopleStep },
+  { key: 'account', label: 'Admin', desc: 'Owner sign-in credentials', Screen: AccountStep },
+  { key: 'live', label: 'Go live', desc: 'Printable entrance QR', Screen: LiveStep, final: true },
+]
+
+const stepsFor = (kind) => (kind === 'office' ? OFFICE_STEPS : HOTEL_STEPS)
 
 const BLANK = {
   account: { name: '', email: '', password: '', confirmPassword: '', role: 'owner' },
@@ -53,6 +65,9 @@ const BLANK = {
     pincode: '',
   },
   rooms: [],
+  hosts: [],
+  // Where check-ins are announced (WhatsApp), 10 digits.
+  reception: '',
   services: ['food', 'water', 'housekeeping', 'laundry', 'maintenance'],
   essentials: {
     wifiSsid: '',
@@ -68,11 +83,14 @@ const BLANK = {
 
 const STORAGE_KEY = 'chqin.onboarding.draft'
 
-const mergeDraft = (saved) => ({
+const blankFor = (kind) => ({ ...BLANK, property: { ...BLANK.property, kind } })
+
+const mergeDraft = (saved, kind) => ({
   ...BLANK,
   ...saved,
+  hosts: Array.isArray(saved?.hosts) ? saved.hosts : [],
   account: { ...BLANK.account, ...saved?.account },
-  property: { ...BLANK.property, ...saved?.property },
+  property: { ...BLANK.property, ...saved?.property, kind },
   business: { ...BLANK.business, ...saved?.business },
   essentials: { ...BLANK.essentials, ...saved?.essentials },
   contacts: { ...saved?.contacts },
@@ -82,14 +100,18 @@ const mergeDraft = (saved) => ({
     : BLANK.services,
 })
 
-const loadDraft = () => {
+const loadDraft = (kind) => {
+  const STEPS = stepsFor(kind)
+  const fresh = { data: blankFor(kind), stepIndex: 0, furthest: 0, resumed: false }
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return { data: BLANK, stepIndex: 0, furthest: 0, resumed: false }
+    if (!raw) return fresh
     const saved = JSON.parse(raw)
+    // A draft for the other kind of place has different steps; start clean.
+    if ((saved.data?.property?.kind ?? 'hotel') !== kind) return fresh
 
     const furthest = Math.min(saved.furthest ?? 0, STEPS.length - 1)
-    const data = mergeDraft(saved.data)
+    const data = mergeDraft(saved.data, kind)
 
     const accountStep = STEPS.findIndex((s) => s.key === 'account')
     if (!data.account.password && furthest >= accountStep) {
@@ -108,12 +130,13 @@ const loadDraft = () => {
       resumed: false,
     }
   } catch {
-    return { data: BLANK, stepIndex: 0, furthest: 0, resumed: false }
+    return fresh
   }
 }
 
-export default function OnboardingWizard({ onComplete }) {
-  const [draft] = useState(loadDraft)
+export default function OnboardingWizard({ kind = 'hotel', onComplete, onChangeKind }) {
+  const STEPS = stepsFor(kind)
+  const [draft] = useState(() => loadDraft(kind))
   const [data, setData] = useState(draft.data)
   const [stepIndex, setStepIndex] = useState(draft.stepIndex)
   const [furthest, setFurthest] = useState(draft.furthest)
@@ -159,9 +182,19 @@ export default function OnboardingWizard({ onComplete }) {
     })
   }
 
+  // Back from the first step goes to the question before it: what kind of place.
   const back = () => {
     setShowErrors(false)
-    setStepIndex((i) => Math.max(0, i - 1))
+    if (stepIndex === 0) {
+      try {
+        localStorage.removeItem(STORAGE_KEY)
+      } catch {
+        /* private mode */
+      }
+      onChangeKind?.()
+      return
+    }
+    setStepIndex((i) => i - 1)
   }
 
   const jumpTo = (i) => {
@@ -173,10 +206,16 @@ export default function OnboardingWizard({ onComplete }) {
 
   const reset = () => {
     setResumed(false)
-    setData(BLANK)
+    setData(blankFor(kind))
     setStepIndex(0)
     setFurthest(0)
     setShowErrors(false)
+    try {
+      localStorage.removeItem(STORAGE_KEY)
+    } catch {
+      /* private mode */
+    }
+    onChangeKind?.()
   }
 
   return (
@@ -294,7 +333,7 @@ export default function OnboardingWizard({ onComplete }) {
             <button
               type="button"
               onClick={back}
-              disabled={stepIndex === 0}
+              disabled={stepIndex === 0 && !onChangeKind}
               aria-label="Back"
               className="-ml-2 grid size-11 shrink-0 place-items-center rounded-xl text-slate-400 transition-colors hover:text-white disabled:opacity-0"
             >
@@ -327,7 +366,7 @@ export default function OnboardingWizard({ onComplete }) {
             {/* Desktop step badge & back button on top of card */}
             <div className="hidden lg:flex items-center justify-between mb-6 pb-4 border-b border-white/[0.06]">
               <div className="flex items-center gap-2">
-                {stepIndex > 0 && (
+                {(stepIndex > 0 || onChangeKind) && (
                   <button
                     type="button"
                     onClick={back}
@@ -381,7 +420,7 @@ export default function OnboardingWizard({ onComplete }) {
                   </p>
                 )}
                 <div className="flex items-center justify-between gap-4">
-                  {stepIndex > 0 ? (
+                  {stepIndex > 0 || onChangeKind ? (
                     <Button tone="secondary" onClick={back} className="px-6">
                       Back
                     </Button>
@@ -451,6 +490,14 @@ function validate(stepKey, data) {
     if (pan && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)) {
       errors.pan = 'A PAN is 10 characters, like ABCDE1234F.'
     }
+  }
+
+  if (stepKey === 'people') {
+    // Optional, but a number that is typed has to be a number.
+    data.hosts.forEach((h, i) => {
+      const digits = (h.phone ?? '').replace(/\D/g, '')
+      if (digits && digits.length !== 10) errors[`phone${i}`] = 'Please enter all 10 digits.'
+    })
   }
 
   if (stepKey === 'rooms' && data.rooms.length === 0) {

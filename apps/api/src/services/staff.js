@@ -4,6 +4,7 @@ import {
   credentials,
   entitlements,
   entries,
+  entrySessions,
   gates,
   guests,
   hotelBookingRooms,
@@ -14,11 +15,14 @@ import {
   staffMemberships,
   staffUsers,
   venues,
+  visitHosts,
 } from '../db/schema/index.js'
-import { latestFlowId } from './flows.js'
-import { newSessionToken, lookupHash, tokenHash, encrypt } from '../lib/crypto.js'
+import { flowKeyFor, latestFlowId } from './flows.js'
+import { newSessionToken, lookupHash, tokenHash, encrypt, decrypt } from '../lib/crypto.js'
+import { roomReady } from './hotelNotify.js'
+import { enqueue } from './outbox.js'
 import { hashPassword, verifyPassword } from '../lib/passwords.js'
-import { conflict, notFound, unauthorized } from '../lib/errors.js'
+import { conflict, forbidden, notFound, unauthorized } from '../lib/errors.js'
 
 /**
  * The staff side: accounts, and reads scoped to the venue they belong to.
@@ -32,16 +36,17 @@ import { conflict, notFound, unauthorized } from '../lib/errors.js'
 /* Accounts                                                            */
 /* ------------------------------------------------------------------ */
 
-/** Creates the owner, the venue and its rooms in one transaction. */
-export async function register({
-  account,
-  property,
-  rooms: roomList,
-  business,
-  services,
-  essentials,
-  contacts,
-}) {
+/**
+ * Creates the owner, the venue and its rooms in one transaction.
+ *
+ * `tx` lets ChqIn Admin run this inside its own audited transaction, and
+ * `flowKey` lets it pick the first gate's flow rather than take the kind's
+ * default.
+ */
+export async function register(
+  { account, property, rooms: roomList, hosts: hostList, business, services, essentials, contacts, reception },
+  { tx: outer, flowKey } = {},
+) {
   const emailHmac = lookupHash(account.email)
 
   const existing = await db.query.staffUsers.findFirst({
@@ -53,7 +58,7 @@ export async function register({
 
   const passwordHash = await hashPassword(account.password)
 
-  return transaction(async (tx) => {
+  return (outer ? (fn) => fn(outer) : transaction)(async (tx) => {
     const [staff] = await tx
       .insert(staffUsers)
       // The address is stored twice on purpose: hashed to find the account at
@@ -86,9 +91,11 @@ export async function register({
           services: services ?? [],
           essentials: essentials ?? {},
           contacts: contacts ?? {},
+          // Where a guest's check-in is announced (WhatsApp). Never sent to guests.
+          reception: reception ?? null,
         },
       })
-      .returning({ id: venues.id, name: venues.name })
+      .returning({ id: venues.id, name: venues.name, kind: venues.kind })
 
     await tx
       .insert(staffMemberships)
@@ -100,6 +107,12 @@ export async function register({
         .values(roomList.map((r) => ({ venueId: venue.id, number: r.number, roomType: r.type })))
     }
 
+    if (hostList?.length) {
+      await tx
+        .insert(visitHosts)
+        .values(hostList.map((h) => ({ venueId: venue.id, name: h.name, phone: h.phone ?? null })))
+    }
+
     // The way in. Made here rather than on first ask so every venue has one
     // from the moment it exists; the card is printed from it.
     const token = newSessionToken()
@@ -107,7 +120,7 @@ export async function register({
       venueId: venue.id,
       name: 'Front desk',
       kind: 'desk',
-      flowId: await latestFlowId('hotel', tx),
+      flowId: await latestFlowId(flowKey ?? flowKeyFor(venue.kind), tx),
       token,
       tokenHash: tokenHash(token),
     })
@@ -133,6 +146,13 @@ export async function login({ email, password }) {
     where: (m, { eq: e }) => e(m.staffId, staff.id),
   })
   if (!membership) throw unauthorized('no_venue', 'This account has no property yet.')
+
+  // Set by ChqIn Admin. Suspending also revoked every open session, so this
+  // is the only check a suspended venue needs on the staff side.
+  const [venue] = await db.select({ status: venues.status }).from(venues).where(eq(venues.id, membership.venueId))
+  if (venue?.status !== 'active') {
+    throw forbidden('venue_suspended', 'This property is not active on ChqIn right now. Contact ChqIn support.')
+  }
 
   await db
     .update(staffUsers)
@@ -263,12 +283,13 @@ export async function checkinCode(venueId) {
   if (existing?.token) return { token: existing.token }
 
   // A venue made before gates existed has none yet.
+  const [venue] = await db.select({ kind: venues.kind }).from(venues).where(eq(venues.id, venueId))
   const token = newSessionToken()
   await db.insert(gates).values({
     venueId,
     name: 'Front desk',
     kind: 'desk',
-    flowId: await latestFlowId('hotel'),
+    flowId: await latestFlowId(flowKeyFor(venue.kind)),
     token,
     tokenHash: tokenHash(token),
   })
@@ -461,6 +482,24 @@ export async function getSettings(venueId) {
   }
 }
 
+/** The number a guest's check-in is announced to. Kept apart from the rest of
+ *  settings so saving it can never overwrite what another panel just saved. */
+export async function getReception(venueId) {
+  const [venue] = await db.select({ settings: venues.settings }).from(venues).where(eq(venues.id, venueId))
+  if (!venue) throw notFound('That property no longer exists.')
+  return { reception: venue.settings?.reception ?? null }
+}
+
+export async function saveReception(venueId, reception) {
+  const [row] = await db
+    .update(venues)
+    .set({ settings: sql`${venues.settings} || ${JSON.stringify({ reception })}::jsonb` })
+    .where(eq(venues.id, venueId))
+    .returning({ id: venues.id })
+  if (!row) throw notFound('That property no longer exists.')
+  return { reception }
+}
+
 /**
  * The three fields the settings screen owns, laid over what is already there.
  *
@@ -638,6 +677,28 @@ export async function assignRoom(venueId, checkinId, roomIds) {
       .set({ roomId: wanted[0] ?? null })
       .where(eq(hotelEntryDetails.entryId, checkinId))
     await tx.update(entries).set({ entitlementId: bookingId }).where(eq(entries.id, checkinId))
+
+    // A guest who gave their number on the stay screen is told which room they
+    // got. Only then: that opt-in is the consent to message them, and it was
+    // given for this stay, so it lives on this stay's session.
+    if (wanted.length) {
+      const [opted] = await tx
+        .select({ sessionId: entrySessions.id, phone: sql`${entrySessions.state}->>'stayPhone'`, hotel: venues.name })
+        .from(entries)
+        .innerJoin(entrySessions, eq(entrySessions.id, entries.sessionId))
+        .innerJoin(venues, eq(venues.id, entries.venueId))
+        .where(eq(entries.id, checkinId))
+      if (opted?.phone) {
+        await enqueue(tx, [
+          roomReady(venueId, decrypt(Buffer.from(opted.phone, 'base64')), {
+            guest: stay.guestName,
+            hotel: opted.hotel,
+            room: found.map((r) => r.number).sort().join(', '),
+            sessionId: opted.sessionId,
+          }),
+        ])
+      }
+    }
 
     return {
       id: checkinId,

@@ -87,6 +87,15 @@ const schema = z.object({
    * still per-scan and single-guest, so a long one grants nothing extra.
    */
   SESSION_TTL_MS: z.coerce.number().default(30 * 60_000),
+  // Who sends the outbox. Unset: messages wait, visible in the table. `log`
+  // prints them and marks them sent — for development, never a real venue.
+  // `kapso` sends them as WhatsApp templates.
+  OUTBOX_SENDER: z.enum(['log', 'kapso']).optional(),
+  // Kapso (WhatsApp). The key sends; the secret proves a webhook is Kapso's.
+  KAPSO_API_KEY: z.string().optional(),
+  KAPSO_PHONE_NUMBER_ID: z.string().optional(),
+  KAPSO_WEBHOOK_SECRET: z.string().optional(),
+  KAPSO_BASE_URL: z.string().default('https://api.kapso.ai/meta/whatsapp/v24.0'),
 
   /**
    * Identifies this deployment to Nominatim, whose usage policy asks for a way
@@ -142,6 +151,44 @@ const schema = z.object({
    * through it. Empty when calling TrueID directly.
    */
   TRUID_PROXY_KEY: z.string().optional(),
+
+  /**
+   * ChqIn Admin — the internal panel, never a venue's.
+   *
+   * Its own origins, kept out of ORIGINS: /admin answers only these, and
+   * /staff and the guest routes never answer them. One list for both would let
+   * the venue dashboard call /admin and the admin panel call /staff.
+   */
+  ADMIN_ORIGINS: z
+    .string()
+    .default('http://localhost:5175')
+    .transform((value) => value.split(',').map((o) => o.trim()).filter(Boolean)),
+  /** Where invite and 2FA-reset links point. */
+  ADMIN_URL: z.string().default('http://localhost:5175'),
+  /**
+   * IPs and CIDRs allowed to reach /admin at all, comma separated. Empty means
+   * no network gate, which is allowed in development and refused in production.
+   */
+  ADMIN_IP_ALLOWLIST: z
+    .string()
+    .default('')
+    .transform((value) => value.split(',').map((o) => o.trim()).filter(Boolean)),
+  /**
+   * The header that carries the real client address behind the proxy. Unset,
+   * the socket address is used. Never the leftmost X-Forwarded-For entry: a
+   * proxy that appends to it leaves that entry under the client's control.
+   */
+  ADMIN_CLIENT_IP_HEADER: z.string().optional(),
+  /**
+   * Lets the admin panel delete venues and erase guests on a hosted database.
+   * Off by default in the spirit of db/reset.js: the database's address is a
+   * fact, and a destructive click against production should need a deliberate
+   * switch, not just a confirmation box.
+   */
+  ADMIN_ALLOW_DESTRUCTIVE: z
+    .string()
+    .default('false')
+    .transform((v) => ['1', 'true', 'yes', 'on'].includes(v.trim().toLowerCase())),
 })
 
 /**
@@ -211,6 +258,12 @@ if (process.env.NODE_ENV === 'production') {
   if (!config.RESEND_API_KEY) {
     console.error('RESEND_API_KEY is missing, so password reset mail cannot be sent. Refusing to start.')
     process.exit(1)
+  }
+  // Password and TOTP are the second and third locks on /admin, not the first.
+  // Not a refusal to start: an internal panel's setting must not hold up a fix
+  // to the guest path. /admin fails closed instead (routes/admin/guard.js).
+  if (!config.ADMIN_IP_ALLOWLIST.length) {
+    console.warn('ADMIN_IP_ALLOWLIST is empty: /admin answers 404 to everyone until it is set.')
   }
 }
 

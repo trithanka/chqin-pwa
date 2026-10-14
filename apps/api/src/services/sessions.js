@@ -4,6 +4,7 @@ import { db } from '../db/client.js'
 import {
   entitlements,
   entrySessions,
+  flowDefinitions,
   gates,
   hotelBookingRooms,
   hotelBookings,
@@ -11,7 +12,7 @@ import {
   venues,
 } from '../db/schema/index.js'
 import { newSessionToken, tokenHash } from '../lib/crypto.js'
-import { conflict, notFound } from '../lib/errors.js'
+import { conflict, forbidden, notFound } from '../lib/errors.js'
 
 /**
  * Entry sessions: what a scanned QR resolves to, and the only thing that
@@ -27,6 +28,14 @@ const OPEN = ['in_progress', 'waiting']
 /** Every write to a session bumps its version, so a stale save can be refused. */
 export const touch = () => ({ version: sql`${entrySessions.version} + 1`, updatedAt: new Date() })
 
+/**
+ * How this gate identifies people. A hotel always uses Aadhaar — its register
+ * is a legal record. Any other flow follows the gate's own setting and, unset,
+ * asks only for a name and number.
+ */
+const identityMethodOf = (row) =>
+  row.flowKey === 'hotel' ? 'aadhaar' : (row.gateConfig?.identity ?? 'basic')
+
 /** Session joined to its venue and booking, whatever state it's in. */
 export async function loadAny(sessionId) {
   const [row] = await db
@@ -35,6 +44,8 @@ export async function loadAny(sessionId) {
       venueId: entrySessions.venueId,
       gateId: entrySessions.gateId,
       flowId: entrySessions.flowId,
+      flowKey: flowDefinitions.key,
+      gateConfig: gates.config,
       bookingId: entrySessions.entitlementId,
       guestId: entrySessions.guestId,
       status: entrySessions.status,
@@ -55,6 +66,8 @@ export async function loadAny(sessionId) {
     })
     .from(entrySessions)
     .innerJoin(venues, eq(venues.id, entrySessions.venueId))
+    .innerJoin(flowDefinitions, eq(flowDefinitions.id, entrySessions.flowId))
+    .innerJoin(gates, eq(gates.id, entrySessions.gateId))
     .leftJoin(entitlements, eq(entitlements.id, entrySessions.entitlementId))
     .leftJoin(hotelBookings, eq(hotelBookings.entitlementId, entitlements.id))
     // Through the join table: a booking can hold more than one room, and the
@@ -64,7 +77,7 @@ export async function loadAny(sessionId) {
     .where(eq(entrySessions.id, sessionId))
     .limit(1)
 
-  return row ?? null
+  return row ? { ...row, identityMethod: identityMethodOf(row) } : null
 }
 
 export const isOpen = (session) => OPEN.includes(session.status) && session.expiresAt >= new Date()
@@ -84,6 +97,9 @@ export async function requireOpen(sessionId) {
 
 export const toPayload = (s) => ({
   sessionId: s.id,
+  // Which flow the gate runs: the guest app picks its screens from this.
+  flow: s.flowKey,
+  identity: s.identityMethod,
   venue: { name: s.venueName, kind: s.venueKind, location: s.venueLocation },
   booking: s.bookingId
     ? {
@@ -106,10 +122,17 @@ export async function resolveToken(token) {
   const hash = tokenHash(token)
 
   const [gate] = await db
-    .select({ id: gates.id, venueId: gates.venueId, flowId: gates.flowId })
+    .select({ id: gates.id, venueId: gates.venueId, flowId: gates.flowId, venueStatus: venues.status })
     .from(gates)
+    .innerJoin(venues, eq(venues.id, gates.venueId))
     .where(and(eq(gates.tokenHash, hash), eq(gates.status, 'active')))
     .limit(1)
+
+  // Suspended or closed by ChqIn Admin: the card still scans, and says why
+  // nothing happens rather than looking broken.
+  if (gate && gate.venueStatus !== 'active') {
+    throw forbidden('venue_suspended', 'This venue is not accepting check-ins right now. Please ask at the desk.')
+  }
 
   if (gate) {
     const [session] = await db

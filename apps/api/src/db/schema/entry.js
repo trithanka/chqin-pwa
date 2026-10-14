@@ -78,6 +78,7 @@ export const gates = pgTable(
   (table) => [
     uniqueIndex('gates_token').on(table.tokenHash),
     index('gates_venue').on(table.venueId),
+    index('gates_flow').on(table.flowId),
     check('gates_kind', sql`${table.kind} IN ('qr','desk','turnstile','kiosk')`),
     check('gates_status', sql`${table.status} IN ('active','revoked')`),
   ],
@@ -167,10 +168,44 @@ export const entrySessions = pgTable(
     index('entry_sessions_waiting')
       .on(table.venueId, table.updatedAt)
       .where(sql`status = 'waiting'`),
+    index('entry_sessions_venue_id').on(table.venueId, table.id),
+    // The admin panel's stuck-session finder.
+    index('entry_sessions_status_updated').on(table.status, table.updatedAt),
+    index('entry_sessions_guest').on(table.guestId).where(sql`guest_id IS NOT NULL`),
+    index('entry_sessions_flow').on(table.flowId).where(sql`status IN ('in_progress','waiting')`),
     check(
       'entry_sessions_status',
       sql`${table.status} IN ('in_progress','waiting','done','rejected','expired','revoked')`,
     ),
+  ],
+)
+
+/**
+ * Notifications waiting to go out, for every kind of gate. Written in the same
+ * transaction as whatever caused them and sent by a worker afterwards, so a slow
+ * or failing provider can never hold a guest at a gate.
+ */
+export const outbox = pgTable(
+  'outbox',
+  {
+    id: id(),
+    venueId: uuid('venue_id').references(() => venues.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    payload: jsonb('payload').notNull().default({}),
+    status: text('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    lastError: text('last_error'),
+    runAfter: timestamp('run_after', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+  },
+  (table) => [
+    index('outbox_pending')
+      .on(table.runAfter)
+      .where(sql`status = 'pending'`),
+    index('outbox_status_id').on(table.status, table.id),
+    index('outbox_venue_id').on(table.venueId, table.id),
+    check('outbox_status', sql`${table.status} IN ('pending','sent','failed','cancelled')`),
   ],
 )
 
@@ -209,6 +244,11 @@ export const entries = pgTable(
       .on(table.idempotencyKey)
       .where(sql`idempotency_key IS NOT NULL`),
     index('entries_venue_day').on(table.venueId, table.enteredAt),
+    // The admin panel's lists: keyset pages by id within each filter.
+    index('entries_venue_id').on(table.venueId, table.id),
+    index('entries_gate_id').on(table.gateId, table.id),
+    index('entries_guest_id').on(table.guestId, table.id).where(sql`guest_id IS NOT NULL`),
+    index('entries_entered_at').on(table.enteredAt),
     check('entries_outcome', sql`${table.outcome} IN ('admitted','denied')`),
   ],
 )

@@ -1,4 +1,5 @@
 import { GUEST_SERVICES } from '@chqin/shared'
+import { config } from '../config.js'
 
 /**
  * What the property offers, as told to a guest who has finished checking in.
@@ -21,6 +22,9 @@ export function stayFrom(settings) {
   const essentials = settings?.essentials ?? {}
 
   return {
+    // Whether requests can be sent from the app. Where WhatsApp isn't switched on
+    // the tiles keep opening the guest's own WhatsApp, which always worked.
+    whatsapp: config.OUTBOX_SENDER === 'kapso',
     services: services
       .filter((key) => GUEST_SERVICES.includes(key) && contacts[key])
       .map((key) => ({ key, contact: contacts[key] })),

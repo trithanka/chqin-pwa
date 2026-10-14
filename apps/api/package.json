@@ -14,6 +14,9 @@
     "db:seed": "node src/db/seed.js",
     "db:reset": "node src/db/reset.js && node src/db/migrate.js && node src/db/seed.js",
     "db:clear": "node src/db/clear.js",
+    "venue:office": "node src/db/createOffice.js",
+    "kapso:templates": "node src/kapsoTemplates.js",
+    "admin:create": "node src/db/createAdmin.js",
     "db:reseed": "node src/db/clear.js && node src/db/seed.js"
   },
   "dependencies": {

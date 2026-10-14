@@ -5,12 +5,16 @@ import { config } from './config.js'
 import { db } from './db/client.js'
 import { handleError } from './lib/errors.js'
 import { checkin } from './routes/checkin.js'
+import { visits } from './routes/visits.js'
+import { webhooks } from './routes/webhooks.js'
+import { stay } from './routes/stay.js'
 import { detect } from './routes/detect.js'
 import { identity } from './routes/identity.js'
 import { places } from './routes/places.js'
 import { sessions } from './routes/sessions.js'
 import { staff } from './routes/staff.js'
 import { webauthn } from './routes/webauthn.js'
+import { admin } from './routes/admin/index.js'
 
 /**
  * ChqIn API — the WebAuthn relying party and the check-in state machine.
@@ -54,12 +58,20 @@ app.use(
     // Never in production: there the allowed origin is exactly what ORIGINS
     // says, because a wildcard with credentials is how a session gets read by
     // a site that isn't ours.
-    origin: (origin) =>
-      config.ORIGINS.includes(origin)
+    //
+    // /admin answers only ADMIN_ORIGINS, and nothing else answers them: the
+    // venue dashboard can't call the admin API, and the admin panel can't call
+    // the staff one.
+    origin: (origin, c) => {
+      const admin = config.ADMIN_ORIGINS.includes(origin)
+      if (c.req.path === '/admin' || c.req.path.startsWith('/admin/')) return admin ? origin : null
+      if (admin) return null
+      return config.ORIGINS.includes(origin)
         ? origin
         : process.env.NODE_ENV !== 'production' && privateOrigin(origin)
           ? origin
-          : null,
+          : null
+    },
     credentials: true,
     // Without this the browser re-asks permission before nearly every call,
     // and the dashboard pays two Singapore round trips for one request. Two
@@ -100,6 +112,9 @@ app.route('/detect', detect)
 app.route('/identity', identity)
 app.route('/webauthn', webauthn)
 app.route('/checkin', checkin)
+app.route('/visits', visits)
+app.route('/webhooks', webhooks)
+app.route('/stay', stay)
 
 // Place lookup for onboarding. Public: it runs before an account exists.
 app.route('/places', places)
@@ -107,5 +122,9 @@ app.route('/places', places)
 // The venue-facing surface. Guest routes are semi-public — a QR token is the
 // entry ticket; these need an account, and every read filters by venue.
 app.route('/staff', staff)
+
+// ChqIn Admin: the team's own panel. Its own cookie, sessions and guards; see
+// routes/admin/index.js for the order they run in.
+app.route('/admin', admin)
 
 app.onError(handleError)

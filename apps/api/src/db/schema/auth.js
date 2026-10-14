@@ -60,6 +60,8 @@ export const authEvents = pgTable(
   },
   (table) => [
     index('auth_events_guest').on(table.guestId, table.occurredAt),
+    index('auth_events_venue_id').on(table.venueId, table.id),
+    index('auth_events_event_id').on(table.event, table.id),
     check('auth_events_outcome', sql`${table.outcome} IN ('ok','failed')`),
   ],
 )

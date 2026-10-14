@@ -18,6 +18,9 @@ import StayDetailsScreen from './screens/StayDetailsScreen'
 import SuccessScreen from './screens/SuccessScreen'
 import StayScreen from './screens/StayScreen'
 import OpeningScreen from './screens/OpeningScreen'
+import VisitWelcomeScreen from './screens/VisitWelcomeScreen'
+import VisitScreen from './screens/VisitScreen'
+import BasicIdentityScreen from './screens/BasicIdentityScreen'
 import { forgetDevice } from './device'
 import { DARK_SCREEN, LIGHT_SCREEN, setStatusBar } from './lib/statusBar'
 import {
@@ -77,6 +80,28 @@ const FLOWS = {
   ],
 }
 
+// The visitor journey: after identity, one screen draws whatever the flow asks
+// next — see VisitScreen. Same identity screens as a hotel, different ending.
+const visitWelcome = { key: 'visitWelcome', label: 'Welcome', Screen: VisitWelcomeScreen, bare: true }
+const visit = { key: 'visit', label: 'Visit', Screen: VisitScreen, final: true, fullBleed: true }
+// Which identity screen a visitor sees is the venue's choice, set in its dashboard.
+const visitFlows = (identity) => {
+  const who =
+    identity === 'aadhaar'
+      ? { key: 'identity', label: 'Identity', Screen: IdentityVerificationScreen }
+      : { key: 'identity', label: 'You', Screen: BasicIdentityScreen }
+  const secure = { key: 'secureDevice', label: 'Secure', Screen: SecureDeviceScreen }
+  return {
+    returning: [
+      visitWelcome,
+      { key: 'deviceVerify', label: 'Verify', Screen: DeviceVerificationScreen },
+      visit,
+    ],
+    firstTime: [visitWelcome, who, secure, visit],
+    newDevice: [visitWelcome, who, secure, visit],
+  }
+}
+
 const HELP = {
   hotelWelcome: 'Confirm the details match your booking. ChqIn works out the rest from your device.',
   deviceVerify: 'Whatever unlocks your phone releases the passkey stored on it. ChqIn only ever sees the signed proof.',
@@ -127,9 +152,12 @@ export default function App() {
   // a reservation becomes required again.
   // A guest whose reservation is attached said all this when they booked, so
   // the stay step is dropped rather than asked twice.
-  const currentFlowSteps = session?.booking
-    ? FLOWS[activeMode].filter((s) => s.key !== 'stayDetails')
-    : FLOWS[activeMode]
+  const isVisit = Boolean(session?.flow && session.flow !== 'hotel')
+  const currentFlowSteps = isVisit
+    ? visitFlows(session.identity)[activeMode]
+    : session?.booking
+      ? FLOWS[activeMode].filter((s) => s.key !== 'stayDetails')
+      : FLOWS[activeMode]
 
   const step = currentFlowSteps[stepIndex]
 
@@ -210,9 +238,11 @@ export default function App() {
   /** Enrol this device, then finish. First-time and new-device end here. */
   const runEnrolment = useCallback(async () => {
     await enrolDevice(session.sessionId, session.verificationId ?? null)
+    // A visitor is let in by the flow's own steps, after this screen.
+    if (isVisit) return
     const result = await completeCheckin(session.sessionId, session.idempotencyKey, session.stay)
     setCheckin(result)
-  }, [session])
+  }, [session, isVisit])
 
   /**
    * Finish without enrolling. The identity check already said who this is and
@@ -221,6 +251,7 @@ export default function App() {
    */
   const finishWithoutPasskey = useCallback(
     async (reason) => {
+      if (isVisit) return
       const result = await completeCheckin(
         session.sessionId,
         session.idempotencyKey,
@@ -229,15 +260,16 @@ export default function App() {
       )
       setCheckin(result)
     },
-    [session],
+    [session, isVisit],
   )
 
   /** Prove an existing passkey, then finish. */
   const runAuthentication = useCallback(async () => {
     await authenticate(session.sessionId)
+    if (isVisit) return
     const result = await completeCheckin(session.sessionId, session.idempotencyKey, session.stay)
     setCheckin(result)
-  }, [session])
+  }, [session, isVisit])
 
   /**
    * A rejected assertion means this device isn't the one the server knows, so

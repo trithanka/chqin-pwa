@@ -16,6 +16,8 @@ import {
   getBooking,
   getGuest,
   getSettings,
+  getReception,
+  saveReception,
   getProperty,
   saveProperty,
   listRooms,
@@ -30,6 +32,19 @@ import {
   profile,
   register,
 } from '../services/staff.js'
+import { respond } from '../services/progress.js'
+import {
+  addEvent,
+  addHost,
+  arrivals,
+  getEntrySettings,
+  saveEntrySettings,
+  listEvents,
+  listHosts,
+  listWaiting,
+  setEventActive,
+  updateHost,
+} from '../services/visits.js'
 
 export const staff = new Hono()
 
@@ -87,6 +102,13 @@ const registerRequest = z.object({
   rooms: z
     .array(z.object({ number: z.string().min(1).max(16), type: z.string().max(40).optional() }))
     .max(500)
+    .default([]),
+  // Where a hotel hears about check-ins (WhatsApp).
+  reception: phoneSchema.nullable().optional(),
+  // People and teams a visitor can ask to see, for a venue that hosts visitors.
+  hosts: z
+    .array(z.object({ name: z.string().min(1).max(120), phone: phoneSchema.optional() }))
+    .max(50)
     .default([]),
   // The registration a hotel is legally operating under. Read off the GST
   // certificate in the browser and editable afterwards; nothing here has been
@@ -261,4 +283,57 @@ staff.get('/settings', async (c) => c.json(await getSettings(venueOf(c))))
 // verb's worth of REST purity isn't worth a fourth method on it.
 staff.post('/settings', body(settingsRequest), async (c) =>
   c.json(await saveSettings(venueOf(c), c.get('body'))),
+)
+
+/* ------------------------------------------------------------------ */
+/* Visitors — venues that host visitors and events                     */
+/* ------------------------------------------------------------------ */
+
+const hostRequest = z.object({
+  name: z.string().min(1).max(120),
+  phone: phoneSchema.nullable().optional(),
+})
+const hostPatch = z.object({
+  name: z.string().min(1).max(120).optional(),
+  phone: phoneSchema.nullable().optional(),
+  active: z.boolean().optional(),
+})
+const eventRequest = z.object({
+  name: z.string().min(1).max(160),
+  organizerId: z.uuid().nullable().optional(),
+})
+const decisionRequest = z.object({ decision: z.enum(['confirm', 'hold', 'decline']) })
+
+staff.get('/visits/waiting', async (c) => c.json({ waiting: await listWaiting(venueOf(c)) }))
+
+staff.get('/visits/arrivals', async (c) => c.json(await arrivals(venueOf(c))))
+
+staff.post('/visits/:id/decision', body(decisionRequest), async (c) =>
+  c.json(await respond(venueOf(c), c.get('session').staffId, c.req.param('id'), c.get('body').decision)),
+)
+
+staff.get('/hosts', async (c) => c.json({ hosts: await listHosts(venueOf(c)) }))
+staff.post('/hosts', body(hostRequest), async (c) =>
+  c.json(await addHost(venueOf(c), c.get('body'))),
+)
+staff.post('/hosts/:id', body(hostPatch), async (c) =>
+  c.json(await updateHost(venueOf(c), c.req.param('id'), c.get('body'))),
+)
+
+staff.get('/events', async (c) => c.json({ events: await listEvents(venueOf(c)) }))
+staff.post('/events', body(eventRequest), async (c) =>
+  c.json(await addEvent(venueOf(c), c.get('body'))),
+)
+staff.post('/events/:id/active', body(z.object({ active: z.boolean() })), async (c) =>
+  c.json(await setEventActive(venueOf(c), c.req.param('id'), c.get('body').active)),
+)
+
+staff.get('/entry-settings', async (c) => c.json(await getEntrySettings(venueOf(c))))
+staff.post('/entry-settings', body(z.object({ identity: z.enum(['basic', 'aadhaar']) })), async (c) =>
+  c.json(await saveEntrySettings(venueOf(c), c.get('body'))),
+)
+
+staff.get('/reception', async (c) => c.json(await getReception(venueOf(c))))
+staff.post('/reception', body(z.object({ reception: phoneSchema.nullable() })), async (c) =>
+  c.json(await saveReception(venueOf(c), c.get('body').reception)),
 )

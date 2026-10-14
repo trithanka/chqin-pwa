@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+/*
+ * ChqIn Admin. Dark stone and amber on purpose: nobody who has used the venue
+ * dashboard (light, blue) should mistake one for the other at a glance.
+ */
+@theme {
+  --color-ink: #0c0a09;
+  --color-surface: #1c1917;
+  --color-raised: #292524;
+  --color-line: rgba(255, 255, 255, 0.08);
+  --color-accent: #f59e0b;
+  --color-accent-soft: rgba(245, 158, 11, 0.12);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  body {
+    margin: 0;
+    background: var(--color-ink);
+    color: #e7e5e4;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+  button {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+}

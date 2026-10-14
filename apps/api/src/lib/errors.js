@@ -17,6 +17,9 @@ export const unauthorized = (code, message) => new ApiError(code, message, 401)
 
 export const conflict = (code, message) => new ApiError(code, message, 409)
 
+/** Input a step cannot accept: the session is fine, the answer is not. */
+export const invalid = (message) => new ApiError('invalid_input', message, 400)
+
 export const forbidden = (code, message) => new ApiError(code, message, 403)
 
 /** Hono error handler: known failures pass through, unknown ones don't leak. */

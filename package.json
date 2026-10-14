@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "npm run dev --workspace @chqin/web",
     "dev:dashboard": "npm run dev --workspace @chqin/dashboard",
+    "dev:admin": "npm run dev --workspace @chqin/admin",
     "dev:api": "npm run dev --workspace @chqin/api",
     "dev:all": "concurrently -n web,dash,api -c blue,magenta,green \"npm:dev\" \"npm:dev:dashboard\" \"npm:dev:api\"",
     "build": "npm run build --workspace @chqin/web && npm run build --workspace @chqin/dashboard",

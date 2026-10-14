@@ -94,9 +94,14 @@ export async function startRegistration(session) {
   // world, so there the simulated row is the one to accept — the request, the
   // verification and this gate all read the same switch.
   const passed = await db.query.identityVerifications.findFirst({
-    where: (v, { and: a, eq: e }) =>
+    where: (v, { and: a, eq: e, or: o }) =>
       liveAadhaar()
-        ? a(e(v.sessionId, session.id), e(v.result, 'passed'), e(v.provider, PROVIDER))
+        ? a(
+            e(v.sessionId, session.id),
+            e(v.result, 'passed'),
+            // `basic` rows can only be written for a gate that chose them.
+            o(e(v.provider, PROVIDER), e(v.method, 'basic')),
+          )
         : a(e(v.sessionId, session.id), e(v.result, 'passed')),
   })
   if (!passed) throw forbidden('verification_required', 'Complete the identity check first.')

@@ -23,6 +23,10 @@ export async function start(token) {
 
   return {
     sessionId: session.sessionId,
+    // Which flow this gate runs; anything but 'hotel' is the visitor journey.
+    flow: session.flow,
+    // How this gate identifies people: 'basic' (name and mobile) or 'aadhaar'.
+    identity: session.identity,
     venue: session.venue,
     booking: session.booking,
     journey: detection.journey,
@@ -76,6 +80,16 @@ export async function authenticate(sessionId) {
   const credential = await runAuthentication(options)
   return api.authenticationVerify({ sessionId, challengeId, credential })
 }
+
+/** A venue that doesn't ask for Aadhaar: the visitor says who they are. */
+export const recordBasicIdentity = (sessionId, name, phone) => api.basicIdentity(sessionId, name, phone)
+
+/** A visitor flow: post answers (or nothing, to ask where we are) and get the next screen's data. */
+export const visitStep = (sessionId, values) => api.visitStep(sessionId, values)
+
+/** After check-in, where this server sends WhatsApp: stay details to the guest, requests to the team. */
+export const sendStayDetails = (sessionId, phone) => api.stayWhatsapp(sessionId, phone)
+export const sendServiceRequest = (sessionId, service, note) => api.stayRequest(sessionId, service, note)
 
 export const completeCheckin = (sessionId, idempotencyKey, stay, noPasskeyReason) =>
   api.checkin(sessionId, idempotencyKey, stay, noPasskeyReason)

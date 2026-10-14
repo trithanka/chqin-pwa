@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   CalendarCheck,
+  CalendarDays,
   Clock,
   ExternalLink,
   LayoutDashboard,
@@ -40,6 +41,26 @@ const NAV = [
   },
 ]
 
+// The desk of a venue that hosts visitors: who is here, who they can see, what
+// events are on. No bookings or rooms — those are a hotel's.
+const VISITOR_NAV = [
+  {
+    heading: 'Front Desk',
+    items: [
+      { to: '/app', end: true, label: 'Today', icon: LayoutDashboard },
+      { to: '/app/hosts', label: 'People & teams', icon: Users },
+      { to: '/app/events', label: 'Events', icon: CalendarDays },
+    ],
+  },
+  {
+    heading: 'Property',
+    items: [
+      { to: '/app/code', label: 'Entrance QR Code', icon: QrCode },
+      { to: '/app/visitors', label: 'Identification', icon: ShieldCheck },
+    ],
+  },
+]
+
 const initial = (text, fallback) => (text?.trim()?.[0] ?? fallback).toUpperCase()
 
 function getBreadcrumbs(pathname, venueName) {
@@ -66,6 +87,12 @@ function getBreadcrumbs(pathname, venueName) {
     }
   } else if (parts[1] === 'code') {
     items.push({ label: 'Check-in QR Code' })
+  } else if (parts[1] === 'hosts') {
+    items.push({ label: 'People & teams' })
+  } else if (parts[1] === 'visitors') {
+    items.push({ label: 'Identification' })
+  } else if (parts[1] === 'events') {
+    items.push({ label: 'Events' })
   } else if (parts[1] === 'settings') {
     items.push({ label: 'Settings' })
   } else {
@@ -168,7 +195,7 @@ export default function Layout() {
 
         {/* Navigation items */}
         <nav className="relative mt-2 flex gap-1.5 overflow-x-auto pb-1 lg:pb-0 lg:mt-0 lg:flex-col lg:gap-5 lg:overflow-visible no-scrollbar">
-          {NAV.map(({ heading, items }) => (
+          {(venue?.kind === 'office' ? VISITOR_NAV : NAV).map(({ heading, items }) => (
             <div key={heading} className="flex gap-1 lg:flex-col lg:gap-1">
               <p className="mb-1.5 hidden px-3 text-[10.5px] font-bold uppercase tracking-[0.14em] text-slate-400/60 lg:block">
                 {heading}

@@ -86,10 +86,10 @@ test('a step with a non-matching "when" is skipped, a matching one runs', async 
   assert.equal(out.status, 'done')
 })
 
-test('input reaches the current step only, not the ones after it', async () => {
+test('input stops at the first step that takes it, and passes through the ones that do not', async () => {
   const seen = []
   const registry = {
-    a: { run: ({ input }) => (seen.push(['a', input.x]), next()) },
+    a: { takesInput: true, run: ({ input }) => (seen.push(['a', input.x]), next()) },
     b: { run: ({ input }) => (seen.push(['b', input.x]), next()) },
     admit: steps.admit,
   }
@@ -156,4 +156,100 @@ test('the flow seeded by migration 0013 is valid', () => {
   assert.doesNotThrow(() =>
     validateFlow([{ type: 'identify' }, { type: 'match_booking', optional: true }, { type: 'admit' }], knownStepTypes),
   )
+})
+
+/* ------------------------------------------------------------------ */
+/* The visitor flow                                                    */
+/* ------------------------------------------------------------------ */
+
+const PURPOSE = {
+  key: 'purpose',
+  kind: 'choice',
+  options: ['meeting', 'office', 'event'],
+}
+const VISITOR = [
+  { type: 'identify' },
+  { type: 'collect_details', fields: [PURPOSE] },
+  { type: 'collect_details', when: { purpose: ['meeting', 'office'] }, fields: [{ key: 'host', kind: 'choice', source: 'hosts' }] },
+  { type: 'staff_approves', when: { purpose: ['meeting', 'office'] } },
+  { type: 'collect_details', when: { purpose: 'event' }, fields: [{ key: 'company', kind: 'text' }] },
+  { type: 'admit' },
+]
+const visitorDeps = () => ({
+  admit: async () => ({ id: 'e1' }),
+  options: async () => [{ value: 'h1', label: 'CEO Office' }],
+})
+const step = (flow, session, input, deps = visitorDeps()) =>
+  advance({ flow: { steps: flow }, session: fresh({ guestId: 'g1', ...session }), input, deps })
+
+test('a "when" list matches any of its values', async () => {
+  const out = await step(VISITOR, {}, { values: { purpose: 'office' } })
+  assert.equal(out.state.purpose, 'office')
+  assert.equal(out.waitingFor, 'details') // on to the host question, not the event one
+  assert.equal(out.cursor, 2)
+})
+
+test('a meeting asks for a host, then waits for staff and tells the host once', async () => {
+  let out = await step(VISITOR, {}, { values: { purpose: 'meeting' } })
+  out = await step(VISITOR, out, { values: { host: 'h1' } })
+  assert.equal(out.status, 'waiting')
+  assert.equal(out.waitingFor, 'staff')
+  assert.deepEqual(out.emits, [{ kind: 'visit.arrival' }])
+
+  // The visitor's screen polling must neither grow the trail nor message the host again.
+  const poll = await step(VISITOR, { ...out, status: 'waiting' }, {})
+  assert.equal(poll.waitingFor, 'staff')
+  assert.equal(poll.trail.length, out.trail.length)
+  assert.deepEqual(poll.emits, [])
+})
+
+test('only a staff decision moves a waiting visitor, and a guest cannot supply one', async () => {
+  let out = await step(VISITOR, {}, { values: { purpose: 'meeting' } })
+  out = await step(VISITOR, out, { values: { host: 'h1' } })
+  const waiting = { ...out, status: 'waiting' }
+
+  // `values` is all a guest can send; an approval smuggled in as a value is just a wrong answer.
+  const poke = await step(VISITOR, waiting, { values: { approval: 'confirm' } })
+  assert.equal(poke.status, 'waiting')
+
+  const held = await step(VISITOR, waiting, { approval: 'hold', by: 's1' })
+  assert.equal(held.status, 'waiting')
+  assert.equal(held.state.approval, 'holding')
+  assert.equal(held.trail.at(-1).held, true)
+  assert.deepEqual(held.emits, [])
+
+  const yes = await step(VISITOR, { ...held, status: 'waiting' }, { approval: 'confirm', by: 's1' })
+  assert.equal(yes.status, 'done')
+  assert.ok(yes.trail.some((t) => t.step === 'staff_approves' && t.by === 's1'))
+
+  const no = await step(VISITOR, waiting, { approval: 'decline', by: 's1' })
+  assert.equal(no.status, 'rejected')
+  assert.equal(no.reason, 'declined')
+})
+
+test('an event goes straight in, skipping the host, and says so', async () => {
+  let out = await step(VISITOR, {}, { values: { purpose: 'event' } })
+  out = await step(VISITOR, out, { values: { company: 'Acme' } })
+  assert.equal(out.status, 'done')
+  assert.deepEqual(out.emits, [{ kind: 'entry.admitted' }])
+  assert.equal(out.trail.some((t) => t.step === 'staff_approves'), false)
+})
+
+test('a choice outside the offered options is refused, not stored', async () => {
+  const bad = step(VISITOR, {}, { values: { purpose: 'burglary' } })
+  await assert.rejects(bad, { code: 'invalid_input' })
+  const blank = step(VISITOR, {}, { values: { purpose: ' ' } })
+  await assert.rejects(blank, { code: 'invalid_input' })
+
+  const out = await step(VISITOR, {}, { values: { purpose: 'meeting' } })
+  await assert.rejects(step(VISITOR, out, { values: { host: 'someone-elses-host' } }), {
+    code: 'invalid_input',
+  })
+})
+
+test('the visitor flow published by migration 0014 is valid', async () => {
+  const { readFileSync } = await import('node:fs')
+  const sql = readFileSync(new URL('../../drizzle/0014_visitor_flow.sql', import.meta.url), 'utf8')
+  const json = sql.match(/'(\[\s*\{"type":"identify"[\s\S]*?\])'::jsonb/)[1]
+  assert.doesNotThrow(() => validateFlow(JSON.parse(json)))
 })

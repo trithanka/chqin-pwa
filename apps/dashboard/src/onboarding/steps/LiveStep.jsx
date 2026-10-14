@@ -75,6 +75,7 @@ export default function LiveStep({ data, onRestart, onComplete }) {
     )
   }
 
+  const office = data.property.kind === 'office'
   const contactCount = new Set(
     data.services.map((s) => (data.contacts[s] ?? '').trim()).filter(Boolean),
   ).size
@@ -95,19 +96,29 @@ export default function LiveStep({ data, onRestart, onComplete }) {
               data.property.city,
             data.business.gstin ? `GSTIN ${data.business.gstin}` : null,
           ]}
-          badge={<Pill tone="green">{data.rooms.length} rooms</Pill>}
-        />
-
-        <Summary
-          icon={Headphones}
-          title={`${data.services.length} guest services`}
-          lines={[data.services.map(serviceLabel).join(', ')]}
           badge={
-            <Pill tone="green">
-              {contactCount} number{contactCount === 1 ? '' : 's'}
-            </Pill>
+            office ? null : <Pill tone="green">{data.rooms.length} rooms</Pill>
           }
         />
+
+        {office ? (
+          <Summary
+            icon={Users}
+            title={`${data.hosts.length} ${data.hosts.length === 1 ? 'person or team' : 'people and teams'}`}
+            lines={[data.hosts.map((h) => h.name).join(', ') || 'Add them from the dashboard.']}
+          />
+        ) : (
+          <Summary
+            icon={Headphones}
+            title={`${data.services.length} guest services`}
+            lines={[data.services.map(serviceLabel).join(', ')]}
+            badge={
+              <Pill tone="green">
+                {contactCount} number{contactCount === 1 ? '' : 's'}
+              </Pill>
+            }
+          />
+        )}
 
         <Summary
           icon={Users}

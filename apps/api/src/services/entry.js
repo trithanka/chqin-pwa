@@ -12,19 +12,26 @@ import { steps as library } from './steps.js'
 
 const FINISHED = new Set(['done', 'rejected', 'expired', 'revoked'])
 
+// A `when` value can be a list, meaning "any of these".
 const applies = (step, state) =>
-  !step.when || Object.entries(step.when).every(([key, value]) => state[key] === value)
+  !step.when ||
+  Object.entries(step.when).every(([key, value]) =>
+    Array.isArray(value) ? value.includes(state[key]) : state[key] === value,
+  )
 
 /**
  * @param flow     { steps } as returned by loadFlow
  * @param session  { status, cursor, state, trail, guestId, entitlementId, expiresAt }
- * @param input    what the guest just supplied; only the step that is current sees it
+ * @param input    what the guest or staff just supplied; the first step with `takesInput` consumes it
  * @param deps     I/O the steps need, e.g. { admit(session) → { id } }
- * @returns        { status, cursor, state, trail, guestId, entitlementId, waitingFor?, reason? }
+ * @returns        { status, cursor, state, trail, guestId, entitlementId, emits, waitingFor?, reason? }
+ *                 `emits` are notifications the caller writes to the outbox in the same
+ *                 transaction as the session — the engine never sends anything itself.
  */
 export async function advance({ flow, session, input = {}, deps = {}, registry = library, now = () => new Date() }) {
   let { cursor, state, trail, guestId, entitlementId } = session
-  const result = () => ({ cursor, state, trail, guestId, entitlementId })
+  const emits = []
+  const result = () => ({ cursor, state, trail, guestId, entitlementId, emits })
 
   if (FINISHED.has(session.status)) return { ...result(), status: session.status }
   if (session.expiresAt && session.expiresAt < now()) return { ...result(), status: 'expired' }
@@ -51,28 +58,36 @@ export async function advance({ flow, session, input = {}, deps = {}, registry =
       deps,
     })
 
+    // Input is for the step that takes it. A step that doesn't (identify, once
+    // the guest is known) passes it on, so answers sent while one is already
+    // satisfied still reach the question they were for.
+    if (impl.takesInput) input = {}
+
     state = { ...state, ...r.state }
     guestId = r.session?.guestId ?? guestId
     entitlementId = r.session?.entitlementId ?? entitlementId
 
     if (r.outcome === 'next') {
       log(step, 'next', r.note)
+      emits.push(...(r.emit ?? []))
       cursor += 1
-      input = {} // consumed by the step it was for
       continue
     }
 
     if (r.outcome === 'wait') {
       // A guest polling a waiting session shouldn't grow the trail.
+      // A step that adds a note (a host asked to keep waiting) is news; a repeat is not.
       const last = trail.at(-1)
-      if (!(last?.step === step.type && last.outcome === 'wait' && last.waitingFor === r.waitingFor)) {
-        log(step, 'wait', { waitingFor: r.waitingFor })
+      const repeat = last?.step === step.type && last.outcome === 'wait' && last.waitingFor === r.waitingFor
+      if (!repeat || r.note) {
+        log(step, 'wait', { waitingFor: r.waitingFor, ...r.note })
+        if (!repeat) emits.push(...(r.emit ?? []))
       }
       return { ...result(), status: 'waiting', waitingFor: r.waitingFor }
     }
 
     if (r.outcome === 'reject') {
-      log(step, 'reject', { reason: r.reason })
+      log(step, 'reject', { reason: r.reason, ...r.note })
       return { ...result(), status: 'rejected', reason: r.reason }
     }
 

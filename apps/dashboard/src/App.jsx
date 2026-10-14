@@ -12,6 +12,10 @@ import BookingsPage, { BookingDetailPage } from './dashboard/BookingsPage'
 import GuestsPage, { GuestDetailPage } from './dashboard/GuestsPage'
 import CodePage from './dashboard/CodePage'
 import SettingsPage from './dashboard/SettingsPage'
+import VisitorsPage from './dashboard/VisitorsPage'
+import HostsPage from './dashboard/HostsPage'
+import EventsPage from './dashboard/EventsPage'
+import EntrySettingsPage from './dashboard/EntrySettingsPage'
 import { useSession } from './session'
 
 import Logo from './components/Logo'
@@ -23,7 +27,9 @@ import Logo from './components/Logo'
  * Signed in: today's arrivals, bookings, guests, and the desk code.
  */
 export default function App() {
-  const { status } = useSession()
+  const { status, user } = useSession()
+  // A venue that hosts visitors has a different desk from a hotel's.
+  const visitors = user?.venue?.kind === 'office'
 
   // Instant fallback only if not yet hydrated from localStorage
   if (status === 'checking') {
@@ -47,6 +53,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={signedIn ? <Navigate to="/app" replace /> : <LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/register/:kind" element={<RegisterPage />} />
 
       {/* Reachable signed in or out: a reset link is opened from an inbox,
           which may well be on a device that is still signed in as someone. */}
@@ -55,7 +62,10 @@ export default function App() {
       <Route path="/verify-email" element={<VerifyEmailPage />} />
 
       <Route path="/app" element={signedIn ? <Layout /> : <Navigate to="/" replace />}>
-        <Route index element={<TodayPage />} />
+        <Route index element={visitors ? <VisitorsPage /> : <TodayPage />} />
+        <Route path="hosts" element={<HostsPage />} />
+        <Route path="events" element={<EventsPage />} />
+        <Route path="visitors" element={<EntrySettingsPage />} />
         <Route path="bookings" element={<BookingsPage />} />
         <Route path="bookings/:id" element={<BookingDetailPage />} />
         <Route path="guests" element={<GuestsPage />} />

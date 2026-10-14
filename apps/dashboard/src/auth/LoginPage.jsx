@@ -89,7 +89,7 @@ export default function LoginPage() {
               to="/register"
               className="font-bold text-sky-400 hover:text-sky-300 hover:underline transition-colors"
             >
-              Register your hotel &rarr;
+              Register your property &rarr;
             </Link>
           </p>
           <div className="flex items-center gap-4 text-[12px] text-slate-500 pt-1">

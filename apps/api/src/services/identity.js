@@ -2,7 +2,7 @@ import { and, desc, eq, isNull } from 'drizzle-orm'
 import { isValidAadhaar } from '@chqin/shared'
 import { db, transaction } from '../db/client.js'
 import { entitlements, guests, identityVerifications } from '../db/schema/index.js'
-import { lookupHash } from '../lib/crypto.js'
+import { encrypt, lookupHash } from '../lib/crypto.js'
 import { uuidv7 } from '../lib/ids.js'
 import { ApiError, notFound } from '../lib/errors.js'
 import { bindGuest } from './sessions.js'
@@ -166,6 +166,9 @@ export async function ensureSessionGuest(session, subject) {
         displayName: subject?.name ?? session.bookingGuestName ?? 'Guest',
         dateOfBirth: subject?.dateOfBirth ?? null,
         gender: subject?.gender ?? null,
+        // Kept for the venue to reach them, never looked up by: two visitors
+        // typing the same number must not become one person.
+        phoneEnc: subject?.phone ? encrypt(subject.phone) : null,
         emailHmac: lookupHash(null),
       })
       .returning({ id: guests.id })
@@ -325,4 +328,33 @@ export async function recordDocumentCapture(session) {
     .returning({ id: identityVerifications.id })
 
   return { captureId: row.id }
+}
+
+/**
+ * Identification without Aadhaar: the visitor says who they are.
+ *
+ * Only for a gate that chose it (`gates.config.identity`). It is what the
+ * visitor typed and is recorded as exactly that — method `basic`, nothing
+ * claimed as verified — so a venue that needs more turns Aadhaar on instead.
+ * The passkey enrolled afterwards still makes the next visit instant.
+ */
+export async function recordBasicIdentity(session, { name, phone }) {
+  if (session.identityMethod !== 'basic') {
+    throw new ApiError('verification_required', 'Complete the identity check to continue.', 403)
+  }
+
+  const [row] = await db
+    .insert(identityVerifications)
+    .values({
+      guestId: session.guestId ?? null,
+      sessionId: session.id,
+      method: 'basic',
+      result: 'passed',
+      subjectName: name,
+      verifiedAt: new Date(),
+    })
+    .returning({ id: identityVerifications.id })
+
+  await ensureSessionGuest(session, { name, phone })
+  return { verificationId: row.id, subject: { name, simulated: false } }
 }

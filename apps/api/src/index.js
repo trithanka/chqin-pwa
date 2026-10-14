@@ -3,6 +3,8 @@ import { app } from './app.js'
 import { config, isRemote, simulateAadhaarSource } from './config.js'
 import { liveAadhaar } from './lib/truid.js'
 import { pool } from './db/client.js'
+import { drain, logSender } from './services/outbox.js'
+import { kapsoSender } from './services/whatsapp.js'
 
 const server = serve({ fetch: app.fetch, port: config.PORT }, (info) => {
   // The database line is here because .env is toggled by hand: knowing which
@@ -27,10 +29,25 @@ const server = serve({ fetch: app.fetch, port: config.PORT }, (info) => {
   }
 })
 
+// Only when a sender is chosen: with none, messages stay pending where anyone
+// can see them, rather than being marked sent without going anywhere.
+const senders = { log: logSender, kapso: kapsoSender }
+if (config.OUTBOX_SENDER === 'kapso' && !(config.KAPSO_API_KEY && config.KAPSO_PHONE_NUMBER_ID)) {
+  console.error('OUTBOX_SENDER=kapso needs KAPSO_API_KEY and KAPSO_PHONE_NUMBER_ID.')
+  process.exit(1)
+}
+const outboxTimer = senders[config.OUTBOX_SENDER]
+  ? setInterval(
+      () => drain(senders[config.OUTBOX_SENDER]).catch((err) => console.error('[outbox]', err.message)),
+      3000,
+    )
+  : null
+
 // Drain in-flight requests and close the pool, so `node --watch` restarts and
 // container stops don't leave half-finished transactions holding locks.
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
+    clearInterval(outboxTimer)
     server.close(async () => {
       await pool.end()
       process.exit(0)
