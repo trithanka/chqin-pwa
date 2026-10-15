@@ -1,6 +1,6 @@
 # ChqIn — data model
 
-How the database is laid out, and why. The source of truth is `apps/api/src/db/schema/`; this page explains the shape. For how an entrance works end to end, read `entry-flow-explained.md` first.
+How the database is laid out, and why. The source of truth is the `*.schema.js` file in each module under `apps/api/src/modules/` (all collected in `apps/api/src/shared/db/schema.js`); this page explains the shape. For how an entrance works end to end, read `entry-flow-explained.md` first.
 
 ## The short answer
 
@@ -12,7 +12,7 @@ How the database is laid out, and why. The source of truth is `apps/api/src/db/s
 | Redis | Not used | Add it when measurement shows challenges or sessions are the hot write. |
 | Object storage | Not used | ID images are not kept. If a regulation ever requires it, the row stores a pointer and hash only. |
 
-IDs are UUIDv7 generated in Node (`lib/ids.js`), never by a database default. Time-ordered ids keep index inserts append-only without exposing a countable sequence. Tokens are stored as SHA-256 hashes, so a database leak is not a set of working keys.
+IDs are UUIDv7 generated in Node (`shared/lib/ids.js`), never by a database default. Time-ordered ids keep index inserts append-only without exposing a countable sequence. Tokens are stored as SHA-256 hashes, so a database leak is not a set of working keys.
 
 The full table-and-relationship diagram is in [database-diagram.md](database-diagram.md).
 

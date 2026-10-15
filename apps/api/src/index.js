@@ -1,10 +1,10 @@
 import { serve } from '@hono/node-server'
 import { app } from './app.js'
 import { config, isRemote, simulateAadhaarSource } from './config.js'
-import { liveAadhaar } from './lib/truid.js'
-import { pool } from './db/client.js'
-import { drain, logSender } from './services/outbox.js'
-import { kapsoSender } from './services/whatsapp.js'
+import { liveAadhaar } from './modules/identity/index.js'
+import { pool } from './shared/db/client.js'
+import { drain, logSender } from './shared/outbox/outbox.js'
+import { kapsoSender } from './integrations/kapso/sender.js'
 
 const server = serve({ fetch: app.fetch, port: config.PORT }, (info) => {
   // The database line is here because .env is toggled by hand: knowing which

@@ -168,6 +168,7 @@ const schema = z.object({
   /**
    * IPs and CIDRs allowed to reach /admin at all, comma separated. Empty means
    * no network gate, which is allowed in development and refused in production.
+   * `*` is the deliberate way to allow any address, in production too.
    */
   ADMIN_IP_ALLOWLIST: z
     .string()
@@ -264,6 +265,8 @@ if (process.env.NODE_ENV === 'production') {
   // to the guest path. /admin fails closed instead (routes/admin/guard.js).
   if (!config.ADMIN_IP_ALLOWLIST.length) {
     console.warn('ADMIN_IP_ALLOWLIST is empty: /admin answers 404 to everyone until it is set.')
+  } else if (config.ADMIN_IP_ALLOWLIST.includes('*')) {
+    console.warn('ADMIN_IP_ALLOWLIST=*: /admin is reachable from any address. Only the password, 2FA and lockout protect it.')
   }
 }
 

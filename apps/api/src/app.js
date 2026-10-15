@@ -2,19 +2,21 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { sql } from 'drizzle-orm'
 import { config } from './config.js'
-import { db } from './db/client.js'
-import { handleError } from './lib/errors.js'
-import { checkin } from './routes/checkin.js'
-import { visits } from './routes/visits.js'
-import { webhooks } from './routes/webhooks.js'
-import { stay } from './routes/stay.js'
-import { detect } from './routes/detect.js'
-import { identity } from './routes/identity.js'
-import { places } from './routes/places.js'
-import { sessions } from './routes/sessions.js'
-import { staff } from './routes/staff.js'
-import { webauthn } from './routes/webauthn.js'
-import { admin } from './routes/admin/index.js'
+import { db } from './shared/db/client.js'
+import { handleError } from './shared/lib/errors.js'
+import { checkin } from './modules/hotel/routes/checkin.js'
+import { visits } from './modules/visitors/routes/visits.js'
+import { webhooks } from './integrations/kapso/webhook.js'
+import { stay } from './modules/hotel/routes/stay.js'
+import { detect } from './modules/identity/routes/detect.js'
+import { identity } from './modules/identity/routes/identity.js'
+import { places } from './modules/venues/routes/places.js'
+import { sessions } from './modules/entry/routes/sessions.js'
+import { staff } from './modules/venues/routes/staff.js'
+import { hotelStaff } from './modules/hotel/routes/staff.js'
+import { visitorStaff } from './modules/visitors/routes/staff.js'
+import { webauthn } from './modules/identity/routes/webauthn.js'
+import { admin } from './modules/admin/routes/index.js'
 
 /**
  * ChqIn API — the WebAuthn relying party and the check-in state machine.
@@ -121,7 +123,12 @@ app.route('/places', places)
 
 // The venue-facing surface. Guest routes are semi-public — a QR token is the
 // entry ticket; these need an account, and every read filters by venue.
+// Order is the authorization boundary: venueStaff holds the public sign-in routes
+// and then the session guard, so the routers mounted after it are private.
+// routes/staffGuard.test.js proves it for every route.
 app.route('/staff', staff)
+app.route('/staff', hotelStaff)
+app.route('/staff', visitorStaff)
 
 // ChqIn Admin: the team's own panel. Its own cookie, sessions and guards; see
 // routes/admin/index.js for the order they run in.

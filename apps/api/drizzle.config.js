@@ -11,7 +11,7 @@ import { config } from './src/config.js'
  */
 export default defineConfig({
   dialect: 'postgresql',
-  schema: './src/db/schema/index.js',
+  schema: './src/shared/db/schema.js',
   out: './drizzle',
   // The same config the server uses — a second hardcoded fallback here is how
   // `db:push` ends up pointed at a different database than the app.
