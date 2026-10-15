@@ -120,6 +120,7 @@ export async function opsInfo() {
     },
     warnings: [
       remote && simulateAadhaar() && 'Aadhaar simulation is ON against a hosted database: any six-digit code passes and the records look verified.',
+      remote && !config.ADMIN_REQUIRE_2FA && 'Admin 2FA is off: a password alone signs in to /admin.',
       remote && config.ADMIN_ALLOW_DESTRUCTIVE && 'Destructive admin actions are allowed on this hosted database.',
       remote && !config.ADMIN_IP_ALLOWLIST.length && '/admin has no IP allow-list on a hosted database.',
       remote && config.ADMIN_IP_ALLOWLIST.includes('*') && '/admin is reachable from any address: only the password, 2FA and lockout protect it.',

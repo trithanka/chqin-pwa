@@ -25,7 +25,9 @@ export async function refresh() {
 }
 
 export async function signIn(email, password) {
-  await api.post('/auth/login', { email, password })
+  const { next } = await api.post('/auth/login', { email, password })
+  // 'done': this server doesn't ask for a code, so the session is complete.
+  if (next === 'done') return refresh()
   set({ status: 'totp', admin: null })
 }
 

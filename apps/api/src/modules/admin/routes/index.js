@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { z } from 'zod'
+import { config } from '../../../config.js'
 import { body } from '../../../shared/lib/validate.js'
 import {
   COOKIE,
@@ -46,8 +47,10 @@ const acceptRequest = z.object({
 
 admin.post('/auth/login', body(loginRequest), async (c) => {
   const token = await login(c.get('body'), meta(c))
-  setCookie(c, COOKIE, token, adminCookie(c, 5 * 60))
-  return c.json({ next: 'totp' })
+  // With 2FA off the session is already complete, so it gets its full lifetime.
+  const done = !config.ADMIN_REQUIRE_2FA
+  setCookie(c, COOKIE, token, adminCookie(c, done ? 8 * 60 * 60 : 5 * 60))
+  return c.json({ next: done ? 'done' : 'totp' })
 })
 
 admin.get('/auth/link', async (c) => c.json(await linkInfo(c.req.query('token'))))

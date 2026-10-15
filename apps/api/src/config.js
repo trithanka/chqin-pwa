@@ -190,6 +190,22 @@ const schema = z.object({
     .string()
     .default('false')
     .transform((v) => ['1', 'true', 'yes', 'on'].includes(v.trim().toLowerCase())),
+  /**
+   * A second factor (authenticator code) after the password. On by default.
+   * Off is a deliberate choice for a small team: the password and the lockout
+   * are then all that stand between the internet and /admin.
+   */
+  ADMIN_REQUIRE_2FA: z
+    .string()
+    .default('true')
+    .transform((v) => !['0', 'false', 'no', 'off'].includes(v.trim().toLowerCase())),
+  /**
+   * An owner login kept in the environment, for a setup with no invite flow:
+   * the account is created on the first sign-in and its password follows the
+   * variable. Both must be set. In production the password needs 12+ characters.
+   */
+  ADMIN_EMAIL: z.string().optional(),
+  ADMIN_PASSWORD: z.string().optional(),
 })
 
 /**
@@ -267,6 +283,12 @@ if (process.env.NODE_ENV === 'production') {
     console.warn('ADMIN_IP_ALLOWLIST is empty: /admin answers 404 to everyone until it is set.')
   } else if (config.ADMIN_IP_ALLOWLIST.includes('*')) {
     console.warn('ADMIN_IP_ALLOWLIST=*: /admin is reachable from any address. Only the password, 2FA and lockout protect it.')
+  }
+  if (!config.ADMIN_REQUIRE_2FA) {
+    console.warn('ADMIN_REQUIRE_2FA is off: a password alone signs in to /admin.')
+  }
+  if (config.ADMIN_PASSWORD && config.ADMIN_PASSWORD.length < 12) {
+    console.error('ADMIN_PASSWORD is shorter than 12 characters, so the env admin login is ignored.')
   }
 }
 

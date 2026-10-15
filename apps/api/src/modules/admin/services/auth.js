@@ -65,8 +65,53 @@ const locked = (admin) => admin.lockedUntil && admin.lockedUntil > new Date()
 let decoy = null
 const decoyHash = async () => (decoy ??= await hashPassword('no-such-admin'))
 
-/** Step one: the password. Returns a session token that can only reach the TOTP step. */
+/**
+ * The owner login kept in the environment (ADMIN_EMAIL, ADMIN_PASSWORD).
+ *
+ * Created on first use, and its password follows the variable: change it,
+ * restart, and the new one works. It never re-enables an account an owner
+ * disabled, and it is ignored in production when the password is short.
+ */
+let envSynced = null
+async function syncEnvAdmin() {
+  const { ADMIN_EMAIL: email, ADMIN_PASSWORD: password } = config
+  if (!email || !password) return
+  if (process.env.NODE_ENV === 'production' && password.length < 12) return
+  const key = `${email}\0${password}`
+  if (envSynced === key) return
+
+  const emailHmac = lookupHash(email)
+  const find = () => db.query.adminUsers.findFirst({ where: (u, { eq: e }) => e(u.emailHmac, emailHmac) })
+  let existing = await find()
+  if (!existing) {
+    await db
+      .insert(adminUsers)
+      .values({
+        emailHmac,
+        emailEnc: encrypt(email),
+        displayName: 'Admin',
+        passwordHash: await hashPassword(password),
+        role: 'owner',
+        status: 'active',
+      })
+      .onConflictDoNothing()
+    existing = await find()
+  }
+  if (existing && !(existing.passwordHash && (await verifyPassword(password, existing.passwordHash)))) {
+    await db
+      .update(adminUsers)
+      .set({ passwordHash: await hashPassword(password), failedAttempts: 0, lockedUntil: null })
+      .where(eq(adminUsers.id, existing.id))
+  }
+  envSynced = key
+}
+
+/**
+ * Step one: the password. With a second factor required, returns a session
+ * that can only reach the TOTP step; without one, a full session.
+ */
 export async function login({ email, password }, meta) {
+  await syncEnvAdmin()
   const admin = await db.query.adminUsers.findFirst({
     where: (u, { eq: e }) => e(u.emailHmac, lookupHash(email)),
   })
@@ -77,14 +122,25 @@ export async function login({ email, password }, meta) {
   if (!ok) return failed(admin, meta, 'password')
 
   const token = newSessionToken()
+  const now = new Date()
+  const full = !config.ADMIN_REQUIRE_2FA
   await db.insert(adminSessions).values({
     adminId: admin.id,
     role: admin.role,
     tokenHash: tokenHash(token),
     ip: meta.ip,
     userAgent: meta.userAgent,
-    expiresAt: new Date(Date.now() + PASSWORD_ONLY_MS),
+    ...(full
+      ? { mfaAt: now, lastSeenAt: now, expiresAt: new Date(now.getTime() + ABSOLUTE_MS) }
+      : { expiresAt: new Date(now.getTime() + PASSWORD_ONLY_MS) }),
   })
+  if (full) {
+    await db
+      .update(adminUsers)
+      .set({ failedAttempts: 0, lockedUntil: null, lastLoginAt: now })
+      .where(eq(adminUsers.id, admin.id))
+    await logAuth(admin, 'auth.login', meta, { secondFactor: false })
+  }
   return token
 }
 
