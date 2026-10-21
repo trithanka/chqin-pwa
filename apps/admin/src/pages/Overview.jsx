@@ -18,14 +18,14 @@ export default function Overview() {
         {o && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <Stat label="Venues" value={o.venues.total} sub={o.venues.byKind.map((k) => `${k.count} ${k.kind}`).join(' · ') || 'none yet'} />
-              <Stat label="Gates" value={o.gates.active} sub={`${o.gates.revoked} revoked`} />
-              <Stat label="Live sessions" value={o.sessions.active} sub={`${o.sessions.waiting} waiting`} tone={o.sessions.waiting ? 'warn' : undefined} />
-              <Stat label="Entries today" value={o.entries.today} sub={`${o.entries.last7Days} in 7 days · ${o.entries.last30Days} in 30`} />
-              <Stat label="Outbox pending" value={o.outbox.pending} sub={o.outbox.oldestPendingAt ? `oldest ${when(o.outbox.oldestPendingAt)}` : 'nothing queued'} tone={o.outbox.pending ? 'warn' : undefined} />
-              <Stat label="Outbox failed" value={o.outbox.failed} tone={o.outbox.failed ? 'bad' : undefined} />
-              <Stat label="Guests" value={o.guests} />
-              <Stat label="Passkeys" value={o.passkeys} sub="not revoked" />
+              <Stat to="/venues" label="Venues" value={o.venues.total} sub={o.venues.byKind.map((k) => `${k.count} ${k.kind}`).join(' · ') || 'none yet'} />
+              <Stat to="/gates" label="Gates" value={o.gates.active} sub={`${o.gates.revoked} revoked`} />
+              <Stat to={o.sessions.waiting ? '/sessions?status=waiting' : '/sessions'} label="Live sessions" value={o.sessions.active} sub={`${o.sessions.waiting} waiting`} tone={o.sessions.waiting ? 'warn' : undefined} />
+              <Stat to="/entries" label="Entries today" value={o.entries.today} sub={`${o.entries.last7Days} in 7 days · ${o.entries.last30Days} in 30`} />
+              <Stat to="/outbox?status=pending" label="Outbox pending" value={o.outbox.pending} sub={o.outbox.oldestPendingAt ? `oldest ${when(o.outbox.oldestPendingAt)}` : 'nothing queued'} tone={o.outbox.pending ? 'warn' : undefined} />
+              <Stat to="/outbox?status=failed" label="Outbox failed" value={o.outbox.failed} tone={o.outbox.failed ? 'bad' : undefined} />
+              <Stat to="/guests" label="Guests" value={o.guests} />
+              <Stat to="/guests" label="Passkeys" value={o.passkeys} sub="not revoked" />
             </div>
           </div>
         )}

@@ -183,7 +183,7 @@ erDiagram
         bytea email_hmac UK
         text role "owner, support, read_only"
         text status
-        bytea totp_secret_enc
+        bytea totp_secret_enc "only if 2FA on"
     }
     admin_sessions {
         uuid id PK

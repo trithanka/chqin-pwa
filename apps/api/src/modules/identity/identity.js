@@ -35,6 +35,10 @@ const OTP_TTL_MS = 5 * 60 * 1000
  * session_id stays server-side in provider_ref.
  */
 export async function requestAadhaarOtp(session, aadhaar) {
+  // Each OTP is a paid provider call; a venue without access never makes one.
+  if (session.identityMethod !== 'aadhaar') {
+    throw new ApiError('aadhaar_not_enabled', 'This venue doesn’t use Aadhaar. Enter your details instead.', 403)
+  }
   const digits = aadhaar.replace(/\s/g, '')
 
   if (!isValidAadhaar(digits)) {
@@ -331,14 +335,16 @@ export async function recordDocumentCapture(session) {
 }
 
 /**
- * Identification without Aadhaar: the visitor says who they are.
+ * Identification without Aadhaar: the visitor gives their name, date of
+ * birth and address (and a mobile number if they like).
  *
- * Only for a gate that chose it (`gates.config.identity`). It is what the
+ * Only where the session's method is basic: the venue has no Aadhaar access,
+ * or its gate chose basic (`gates.config.identity`). It is what the
  * visitor typed and is recorded as exactly that — method `basic`, nothing
  * claimed as verified — so a venue that needs more turns Aadhaar on instead.
  * The passkey enrolled afterwards still makes the next visit instant.
  */
-export async function recordBasicIdentity(session, { name, phone }) {
+export async function recordBasicIdentity(session, { name, dateOfBirth, address, phone }) {
   if (session.identityMethod !== 'basic') {
     throw new ApiError('verification_required', 'Complete the identity check to continue.', 403)
   }
@@ -351,10 +357,14 @@ export async function recordBasicIdentity(session, { name, phone }) {
       method: 'basic',
       result: 'passed',
       subjectName: name,
+      subjectDob: dateOfBirth,
+      // Free text as typed, under `street` so the register's address
+      // formatter shows it on the first line like a UIDAI address.
+      subjectAddress: { street: address },
       verifiedAt: new Date(),
     })
     .returning({ id: identityVerifications.id })
 
-  await ensureSessionGuest(session, { name, phone })
+  await ensureSessionGuest(session, { name, dateOfBirth, phone })
   return { verificationId: row.id, subject: { name, simulated: false } }
 }

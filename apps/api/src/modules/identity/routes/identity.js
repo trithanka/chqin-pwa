@@ -104,14 +104,23 @@ identity.post('/aadhaar/verify', body(otpVerify), async (c) => {
 const basicRequest = z.object({
   sessionId: z.uuid(),
   name: z.string().trim().min(2, 'Enter your name').max(120),
-  phone: z.string().regex(/^[\d\s+()-]{10,16}$/, 'Enter your mobile number'),
+  dateOfBirth: z.iso
+    .date('Enter your date of birth')
+    .refine((d) => d >= '1900-01-01' && d <= new Date().toISOString().slice(0, 10), 'Enter your date of birth'),
+  address: z.string().trim().min(5, 'Enter your address').max(300),
+  // Optional: kept so the venue can reach them, never required to get in.
+  phone: z
+    .string()
+    .regex(/^[\d\s+()-]{10,16}$/, 'Enter a valid mobile number')
+    .optional()
+    .or(z.literal('')),
 })
 
-/** For a venue that doesn't ask for Aadhaar: a name and a mobile number. */
+/** For a venue without Aadhaar: name, date of birth and address, as the guest gives them. */
 identity.post('/basic', body(basicRequest), async (c) => {
-  const { sessionId, name, phone } = c.get('body')
+  const { sessionId, name, dateOfBirth, address, phone } = c.get('body')
   const session = await requireOpen(sessionId)
-  const result = await recordBasicIdentity(session, { name, phone: phone.trim() })
+  const result = await recordBasicIdentity(session, { name, dateOfBirth, address, phone: phone?.trim() || null })
   await logEvent(c, {
     venueId: session.venueId,
     sessionId: session.id,

@@ -3,7 +3,7 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { z } from 'zod'
 import { guestServiceSchema, phoneSchema } from '@chqin/shared'
 import { body } from '../../../shared/lib/validate.js'
-import { unauthorized } from '../../../shared/lib/errors.js'
+import { forbidden, unauthorized } from '../../../shared/lib/errors.js'
 import { COOKIE, cookieOptions, issue, read, revoke } from '../../../shared/lib/session.js'
 import {
   requestPasswordReset,
@@ -196,6 +196,11 @@ staff.use('/*', async (c, next) => {
   // refused here rather than living out its expiry.
   const claims = await read(getCookie(c, COOKIE))
   if (!claims) throw unauthorized('no_session', 'Sign in to continue.')
+  // A ChqIn Admin view looks, never changes. Checked here, ahead of all three
+  // /staff routers, so no route can forget it.
+  if (claims.adminId && !['GET', 'HEAD', 'OPTIONS'].includes(c.req.method)) {
+    throw forbidden('read_only_view', 'This is a read-only ChqIn view. Nothing can be changed from here.')
+  }
   c.set('session', claims)
   await next()
 })

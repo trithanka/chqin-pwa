@@ -25,15 +25,21 @@ import { newSessionToken, tokenHash } from './crypto.js'
 export const COOKIE = 'chqin_staff'
 const MAX_AGE_SECONDS = 60 * 60 * 12
 
-/** Creates the row and returns the token that addresses it. */
-export async function issue({ staffId, venueId, role }) {
+/**
+ * Creates the row and returns the token that addresses it. `adminId` marks a
+ * ChqIn Admin view: read-only, and short (VIEW_SECONDS).
+ */
+export const VIEW_SECONDS = 30 * 60
+
+export async function issue({ staffId, venueId, role, adminId = null }) {
   const token = newSessionToken()
   await db.insert(staffSessions).values({
     staffId,
     venueId,
     role,
+    adminId,
     tokenHash: tokenHash(token),
-    expiresAt: new Date(Date.now() + MAX_AGE_SECONDS * 1000),
+    expiresAt: new Date(Date.now() + (adminId ? VIEW_SECONDS : MAX_AGE_SECONDS) * 1000),
   })
   return token
 }
@@ -48,7 +54,7 @@ export async function read(token) {
   })
   if (!session) return null
 
-  return { staffId: session.staffId, venueId: session.venueId, role: session.role, sessionId: session.id }
+  return { staffId: session.staffId, venueId: session.venueId, role: session.role, sessionId: session.id, adminId: session.adminId }
 }
 
 /** Logout. Idempotent: an already-revoked or unknown token is not an error. */
@@ -95,7 +101,7 @@ export async function revokeAllFor(staffId) {
  * the truth, so that is trusted when present — Render and Vercel both set it,
  * and neither passes a client-supplied one through.
  */
-export const cookieOptions = (c) => {
+export const cookieOptions = (c, maxAge = MAX_AGE_SECONDS) => {
   const forwarded = c?.req?.header('x-forwarded-proto')?.split(',')[0]?.trim()
   const scheme = forwarded ?? (c ? new URL(c.req.url).protocol.replace(':', '') : 'https')
 
@@ -104,6 +110,6 @@ export const cookieOptions = (c) => {
     sameSite: config.COOKIE_SAMESITE,
     secure: config.COOKIE_SAMESITE === 'None' || scheme === 'https',
     path: '/',
-    maxAge: MAX_AGE_SECONDS,
+    maxAge,
   }
 }

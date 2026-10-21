@@ -30,7 +30,7 @@ export async function reports(params) {
   const r = range(params)
   const venue = (column) => (params.venueId ? sql`${column} = ${params.venueId}` : null)
 
-  const [daily, venues, approvals, journeys, identity] = await Promise.all([
+  const [daily, venues, approvals, journeys, identity, aadhaar] = await Promise.all([
     rowsOf(sql`
       SELECT (e.entered_at AT TIME ZONE ${TZ})::date::text AS day, v.name AS venue, count(*)::int AS entries
       FROM entries e JOIN venues v ON v.id = e.venue_id
@@ -71,8 +71,23 @@ export async function reports(params) {
       LEFT JOIN entry_sessions s ON s.id = iv.session_id
       WHERE ${whereAll([inRange(sql`iv.created_at`, r), venue(sql`s.venue_id`)])}
       GROUP BY iv.method, iv.result ORDER BY checks DESC`),
+    // Aadhaar cost per venue. Every row is one OTP request; a live one is a
+    // paid provider call whether or not the guest finishes. Simulated rows
+    // cost nothing and are counted apart so they never inflate a bill.
+    rowsOf(sql`
+      SELECT v.id AS venue_id, v.name AS venue, v.kind,
+        (v.settings->>'aadhaarAccess') IS DISTINCT FROM 'false' AS access,
+        count(*) FILTER (WHERE iv.provider IS DISTINCT FROM 'simulated')::int AS otps,
+        count(*) FILTER (WHERE iv.provider IS DISTINCT FROM 'simulated' AND iv.result = 'passed')::int AS verified,
+        count(*) FILTER (WHERE iv.provider IS DISTINCT FROM 'simulated' AND iv.result <> 'passed')::int AS not_completed,
+        count(*) FILTER (WHERE iv.provider = 'simulated')::int AS simulated
+      FROM identity_verifications iv
+      JOIN entry_sessions s ON s.id = iv.session_id
+      JOIN venues v ON v.id = s.venue_id
+      WHERE iv.method = 'aadhaar_otp' AND ${whereAll([inRange(sql`iv.created_at`, r), venue(sql`s.venue_id`)])}
+      GROUP BY v.id, v.name, v.kind, v.settings ORDER BY otps DESC, simulated DESC`),
   ])
-  return { range: r, daily, venues, approvals, journeys, identity }
+  return { range: r, daily, venues, approvals, journeys, identity, aadhaar }
 }
 
 /* ------------------------------------------------------------------ */

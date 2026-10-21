@@ -25,7 +25,7 @@ export async function start(token) {
     sessionId: session.sessionId,
     // Which flow this gate runs; anything but 'hotel' is the visitor journey.
     flow: session.flow,
-    // How this gate identifies people: 'basic' (name and mobile) or 'aadhaar'.
+    // How this gate identifies people: 'basic' (name, date of birth, address) or 'aadhaar'.
     identity: session.identity,
     venue: session.venue,
     booking: session.booking,
@@ -81,8 +81,8 @@ export async function authenticate(sessionId) {
   return api.authenticationVerify({ sessionId, challengeId, credential })
 }
 
-/** A venue that doesn't ask for Aadhaar: the visitor says who they are. */
-export const recordBasicIdentity = (sessionId, name, phone) => api.basicIdentity(sessionId, name, phone)
+/** A venue without Aadhaar: the guest says who they are. */
+export const recordBasicIdentity = (sessionId, details) => api.basicIdentity(sessionId, details)
 
 /** A visitor flow: post answers (or nothing, to ask where we are) and get the next screen's data. */
 export const visitStep = (sessionId, values) => api.visitStep(sessionId, values)

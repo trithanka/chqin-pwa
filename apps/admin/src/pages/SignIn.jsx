@@ -24,6 +24,24 @@ function Shell({ title, subtitle, children }) {
   )
 }
 
+/** Password field with a show/hide toggle. */
+function PasswordInput(props) {
+  const [shown, setShown] = useState(false)
+  return (
+    <div className="relative">
+      <Input {...props} type={shown ? 'text' : 'password'} className="pr-14" />
+      <button
+        type="button"
+        onClick={() => setShown((v) => !v)}
+        aria-label={shown ? 'Hide password' : 'Show password'}
+        className="absolute inset-y-0 right-0 px-3 text-[12px] text-stone-400 hover:text-stone-200"
+      >
+        {shown ? 'Hide' : 'Show'}
+      </button>
+    </div>
+  )
+}
+
 function useForm(run) {
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState(null)
@@ -84,7 +102,7 @@ export function SignInPage() {
           <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" autoFocus />
         </Field>
         <Field label="Password">
-          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
+          <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
         </Field>
         {first.problem && <p className="text-[13px] text-red-300">{first.problem}</p>}
         <Button type="submit" tone="primary" className="w-full" loading={first.busy} disabled={!email || !password}>
@@ -140,7 +158,7 @@ export function AcceptPage() {
         <p className="break-all text-center font-mono text-[11.5px] text-stone-400">{info.secret}</p>
         {info.needsPassword && (
           <Field label="Password" hint="At least 12 characters.">
-            <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
+            <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
           </Field>
         )}
         <Field label="Code from the app">

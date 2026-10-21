@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { AlertTriangle, LoaderCircle, X } from 'lucide-react'
 
 /**
@@ -91,15 +92,23 @@ export const statusTone = (status) =>
 
 export const Status = ({ value }) => <Pill tone={statusTone(value)}>{value ?? '—'}</Pill>
 
-export function Stat({ label, value, sub, tone }) {
-  return (
-    <Panel className="p-4">
+/** A number with a label. Given `to`, the whole card links to where that number comes from. */
+export function Stat({ label, value, sub, tone, to }) {
+  const card = (
+    <Panel className={`h-full p-4 ${to ? 'transition-colors group-hover:border-stone-600 group-hover:bg-stone-800/60' : ''}`}>
       <p className="text-[11.5px] font-medium uppercase tracking-wide text-stone-500">{label}</p>
       <p className={`mt-1 text-[24px] font-semibold ${tone === 'bad' ? 'text-red-300' : tone === 'warn' ? 'text-amber-300' : 'text-white'}`}>
         {value ?? '—'}
       </p>
       {sub && <p className="mt-0.5 text-[12px] text-stone-500">{sub}</p>}
     </Panel>
+  )
+  return to ? (
+    <Link to={to} className="group block rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+      {card}
+    </Link>
+  ) : (
+    card
   )
 }
 

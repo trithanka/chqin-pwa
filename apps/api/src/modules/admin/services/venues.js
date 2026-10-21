@@ -146,6 +146,40 @@ export async function updateVenue(tx, id, patch) {
   return { before: pick(before), after: pick(after), result: after, venueId: id }
 }
 
+/**
+ * Give or take away Aadhaar verification for a venue. Off means every guest and
+ * visitor there gives a name, date of birth and address instead — hotels too.
+ * Kept in settings so the guest path reads it with the session it already loads.
+ */
+export async function setAadhaarAccess(tx, id, enabled) {
+  const [before] = await tx.select({ settings: venues.settings }).from(venues).where(eq(venues.id, id)).for('update')
+  if (!before) throw notFound('That venue was not found.')
+  const [after] = await tx
+    .update(venues)
+    .set({ settings: sql`COALESCE(${venues.settings}, '{}'::jsonb) || ${JSON.stringify({ aadhaarAccess: enabled })}::jsonb` })
+    .where(eq(venues.id, id))
+    .returning({ settings: venues.settings })
+  return {
+    before: { aadhaarAccess: before.settings?.aadhaarAccess !== false },
+    after: { aadhaarAccess: enabled },
+    result: { aadhaarAccess: enabled, settings: after.settings },
+    venueId: id,
+  }
+}
+
+/**
+ * Whose dashboard a ChqIn view opens: the venue's owner, so support sees
+ * exactly what the person who called sees. Any staff member if there's no owner.
+ */
+export async function viewAsTarget(venueId) {
+  const rows = await db
+    .select({ staffId: staffMemberships.staffId, role: staffMemberships.role })
+    .from(staffMemberships)
+    .where(eq(staffMemberships.venueId, venueId))
+  if (!rows.length) throw conflict('no_staff', 'This venue has no staff account to view as.')
+  return rows.find((r) => r.role === 'owner') ?? rows[0]
+}
+
 export async function updateSettings(tx, id, settings) {
   const [before] = await tx.select({ settings: venues.settings }).from(venues).where(eq(venues.id, id)).for('update')
   if (!before) throw notFound('That venue was not found.')

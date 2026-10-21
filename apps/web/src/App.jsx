@@ -153,11 +153,12 @@ export default function App() {
   // A guest whose reservation is attached said all this when they booked, so
   // the stay step is dropped rather than asked twice.
   const isVisit = Boolean(session?.flow && session.flow !== 'hotel')
-  const currentFlowSteps = isVisit
-    ? visitFlows(session.identity)[activeMode]
-    : session?.booking
-      ? FLOWS[activeMode].filter((s) => s.key !== 'stayDetails')
-      : FLOWS[activeMode]
+  // A hotel without Aadhaar access (set by ChqIn Admin) asks for the basic
+  // details in the same place the Aadhaar check would have been.
+  const hotelSteps = (session?.booking ? FLOWS[activeMode].filter((s) => s.key !== 'stayDetails') : FLOWS[activeMode]).map(
+    (s) => (s.key === 'identity' && session?.identity === 'basic' ? { ...s, label: 'You', Screen: BasicIdentityScreen } : s),
+  )
+  const currentFlowSteps = isVisit ? visitFlows(session.identity)[activeMode] : hotelSteps
 
   const step = currentFlowSteps[stepIndex]
 

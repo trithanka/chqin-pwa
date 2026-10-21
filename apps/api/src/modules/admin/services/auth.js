@@ -216,7 +216,8 @@ export async function readSession(token) {
     name: row.name,
     role: row.role,
     mfa: Boolean(row.mfaAt),
-    email: maskEmail(decrypt(row.emailEnc)),
+    // Their own address, shown only to them: nothing to mask.
+    email: decrypt(row.emailEnc),
   }
 }
 

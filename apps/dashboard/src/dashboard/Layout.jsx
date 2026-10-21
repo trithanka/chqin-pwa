@@ -137,6 +137,20 @@ export default function Layout() {
 
   return (
     <div className="flex min-h-dvh flex-col lg:flex-row bg-[#f8fafc]">
+      {/* Opened from ChqIn Admin: the server refuses every change, so say so up front. */}
+      {user?.readOnlyView && (
+        <div className="print-hide fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-full bg-amber-400 px-4 py-2 text-[13px] font-semibold text-stone-950 shadow-lg">
+          <span>ChqIn view · read-only</span>
+          <button
+            type="button"
+            onClick={handleLogout}
+            disabled={loggingOut}
+            className="rounded-full bg-stone-950/10 px-3 py-0.5 hover:bg-stone-950/20"
+          >
+            Exit
+          </button>
+        </div>
+      )}
       {/* Sidebar Rail */}
       <aside className="print-hide relative flex shrink-0 flex-col overflow-hidden border-b border-white/[0.08] bg-[#090d16] px-3.5 py-4 lg:sticky lg:top-0 lg:h-dvh lg:w-[264px] lg:border-b-0 lg:border-r lg:py-5 lg:px-4 z-30">
         {/* Soft atmospheric gradient glow behind logo */}

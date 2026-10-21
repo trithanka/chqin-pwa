@@ -74,12 +74,18 @@ test('visitor flow: host approval, event check-in, isolation between venues', { 
     }
     let probe = await who(nest.token)
     assert.equal(probe.scan.identity, 'basic')
+    const priya = { name: 'Priya Nair', dateOfBirth: '1992-04-18', address: '12 GS Road, Guwahati 781005' }
     assert.equal((await probe.basic({ name: 'A', phone: '12' })).status, 400)
-    const ok = await json(await probe.basic({ name: 'Priya Nair', phone: '98765 43210' }))
+    // Date of birth and address are required; the mobile number is not.
+    assert.equal((await probe.basic({ name: 'Priya Nair' })).status, 400)
+    assert.equal((await probe.basic({ ...priya, dateOfBirth: '2999-01-01' })).status, 400)
+    const ok = await json(await probe.basic(priya))
     assert.equal(ok.subject.name, 'Priya Nair')
     const [made] = await db.select().from(S.identityVerifications).where(eq(S.identityVerifications.sessionId, probe.scan.sessionId))
     assert.equal(made.method, 'basic')
     assert.equal(made.result, 'passed')
+    assert.equal(made.subjectDob, '1992-04-18')
+    assert.deepEqual(made.subjectAddress, { street: '12 GS Road, Guwahati 781005' })
     // The visitor is now a guest on the session, so the flow moves on to its questions.
     const stepped = await json(await call('POST', '/visits/step', { sessionId: probe.scan.sessionId }))
     assert.deepEqual(stepped.step.fields.map((f) => f.key), ['purpose'])
@@ -91,9 +97,28 @@ test('visitor flow: host approval, event check-in, isolation between venues', { 
     assert.equal((await json(await call('GET', '/staff/entry-settings', null, nest.cookie))).identity, 'aadhaar')
     probe = await who(nest.token)
     assert.equal(probe.scan.identity, 'aadhaar')
-    assert.equal((await probe.basic({ name: 'Priya Nair', phone: '98765 43210' })).status, 403)
+    assert.equal((await probe.basic({ ...priya, phone: '98765 43210' })).status, 403)
     // Another venue is untouched by it.
     assert.equal((await json(await call('GET', '/staff/entry-settings', null, other.cookie))).identity, 'basic')
+
+    // ChqIn Admin takes Aadhaar away: the venue's choice no longer counts, it
+    // can't pick Aadhaar again, and no OTP can be requested.
+    const [{ venueId: nestId }] = await db
+      .select({ venueId: S.entrySessions.venueId })
+      .from(S.entrySessions)
+      .where(eq(S.entrySessions.id, probe.scan.sessionId))
+    await db.update(S.venues).set({ settings: sql`settings || '{"aadhaarAccess": false}'::jsonb` }).where(eq(S.venues.id, nestId))
+    const settings = await json(await call('GET', '/staff/entry-settings', null, nest.cookie))
+    assert.deepEqual(settings, { identity: 'basic', aadhaarAccess: false })
+    assert.equal((await call('POST', '/staff/entry-settings', { identity: 'aadhaar' }, nest.cookie)).status, 403)
+    probe = await who(nest.token)
+    assert.equal(probe.scan.identity, 'basic')
+    assert.equal(
+      (await call('POST', '/identity/aadhaar/otp', { sessionId: probe.scan.sessionId, aadhaar: '2341 2341 2346' })).status,
+      403,
+    )
+    assert.equal((await probe.basic(priya)).status, 200)
+    await db.update(S.venues).set({ settings: sql`settings - 'aadhaarAccess'` }).where(eq(S.venues.id, nestId))
     await call('POST', '/staff/entry-settings', { identity: 'basic' }, nest.cookie)
 
     // A meeting: asks for purpose, then host, then waits.

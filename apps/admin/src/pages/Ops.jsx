@@ -66,6 +66,32 @@ export function Reports() {
               />
             </Section>
 
+            <Section title="Aadhaar usage by venue" table="aadhaar" filters={filters} write={write}>
+              <p className="border-b border-line px-4 py-2.5 text-[12px] text-stone-500">
+                Each OTP sent is one paid provider call, finished or not. Simulated checks cost nothing.
+                {r.aadhaar.length > 0 && (
+                  <>
+                    {' '}Total in range: <span className="text-stone-200">{r.aadhaar.reduce((n, a) => n + a.otps, 0)}</span> paid OTPs.
+                  </>
+                )}
+              </p>
+              <Table
+                rows={r.aadhaar}
+                empty="No Aadhaar checks in this range."
+                onRow={(a) => set('venueId', a.venueId)}
+                columns={[
+                  { label: 'Venue', render: (a) => a.venue },
+                  { label: 'Kind', render: (a) => a.kind },
+                  { label: 'Access', render: (a) => <Pill tone={a.access ? 'good' : undefined}>{a.access ? 'on' : 'off'}</Pill> },
+                  { label: 'OTPs sent', render: (a) => a.otps },
+                  { label: 'Verified', render: (a) => a.verified },
+                  { label: 'Not completed', render: (a) => a.notCompleted },
+                  { label: 'Completion', render: (a) => pct(a.verified, a.notCompleted) },
+                  { label: 'Simulated', render: (a) => a.simulated },
+                ]}
+              />
+            </Section>
+
             <Section title="Host approval" table="approvals" filters={filters} write={write}>
               <Table
                 rows={r.approvals}

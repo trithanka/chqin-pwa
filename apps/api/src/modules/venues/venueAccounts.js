@@ -152,7 +152,7 @@ export async function login({ email, password }) {
   }
 }
 
-export async function profile({ staffId, venueId }) {
+export async function profile({ staffId, venueId, adminId }) {
   const [row] = await db
     .select({
       name: staffUsers.displayName,
@@ -172,5 +172,7 @@ export async function profile({ staffId, venueId }) {
     name: row.name,
     role: row.role,
     venue: { name: row.venueName, kind: row.venueKind, location: row.venueLocation },
+    // A ChqIn Admin view: the dashboard says so, and that nothing can be changed.
+    ...(adminId ? { readOnlyView: true } : {}),
   }
 }

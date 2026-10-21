@@ -104,9 +104,11 @@ export default function Layout() {
             ))}
           </nav>
           <div className="border-t border-line p-3 text-[12px]">
-            <p className="truncate text-stone-200">{admin?.name}</p>
-            <p className="truncate text-stone-500">
-              {admin?.email} · <span className="text-amber-300">{admin?.role}</span>
+            <p className="truncate text-stone-200">
+              {admin?.name} · <span className="text-amber-300">{admin?.role}</span>
+            </p>
+            <p className="break-all text-stone-500" title={admin?.email}>
+              {admin?.email}
             </p>
             <button onClick={signOut} className="mt-2 flex items-center gap-1.5 text-stone-400 hover:text-white">
               <LogOut size={13} /> Sign out

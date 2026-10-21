@@ -9,8 +9,8 @@ const OPTIONS = [
   {
     value: 'basic',
     icon: UserRound,
-    title: 'Name and mobile number',
-    body: 'Visitors type who they are and a number to reach them. Quick, nothing is checked against a government record.',
+    title: 'Name, date of birth and address',
+    body: 'Visitors type who they are, with a mobile number if they like. Quick, nothing is checked against a government record.',
   },
   {
     value: 'aadhaar',
@@ -54,15 +54,21 @@ export default function EntrySettingsPage() {
       />
       <Async loading={loading} error={error} onRetry={reload}>
         <div className="grid gap-3">
+          {data && !data.aadhaarAccess && (
+            <p className="rounded-xl bg-amber-50 px-4 py-3 text-[13px] font-medium text-amber-800 ring-1 ring-amber-200">
+              Aadhaar verification isn’t enabled for this venue. Contact ChqIn to turn it on.
+            </p>
+          )}
           {OPTIONS.map(({ value, icon: Icon, title, body }) => (
             <button
               key={value}
               type="button"
+              disabled={value === 'aadhaar' && data && !data.aadhaarAccess}
               onClick={() => {
                 setIdentity(value)
                 setSaved(false)
               }}
-              className={`flex items-start gap-4 rounded-2xl border p-5 text-left transition-colors ${
+              className={`flex items-start gap-4 rounded-2xl border p-5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                 identity === value ? 'border-brand bg-brand-soft' : 'border-slate-200 bg-white hover:border-slate-300'
               }`}
             >

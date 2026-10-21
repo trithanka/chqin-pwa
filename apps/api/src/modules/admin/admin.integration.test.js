@@ -117,6 +117,63 @@ test('ChqIn Admin: isolation, roles, audit, venues and gates', { skip }, async (
       assert.equal((await pre('/staff/me', STAFF)).headers.get('access-control-allow-origin'), STAFF)
     })
 
+    await t.test('view as a venue: read-only, audited, support and owners only', async () => {
+      const name = `View IT Office ${stamp}`
+      const reg = await call(
+        'POST',
+        '/staff/register',
+        {
+          account: { name: 'Owner', email: `it-view-${stamp}@test.dev`, password: 'a-long-password-1' },
+          property: { name, kind: 'office', city: 'Guwahati', timezone: 'Asia/Kolkata' },
+        },
+        { origin: STAFF, admin: false },
+      )
+      assert.equal(reg.status, 200)
+      const [venue] = await db.select().from(S.venues).where(eq(S.venues.name, name))
+      const path = `/admin/venues/${venue.id}/view-as`
+
+      // Shows guests unmasked, so not for read_only, and never without a reason.
+      assert.equal((await call('POST', path, { reason: 'x' }, { cookie: viewer.cookie })).status, 403)
+      assert.equal((await call('POST', path, { reason: '' }, { cookie: support.cookie })).status, 400)
+
+      const before = await auditCount()
+      const r = await call('POST', path, { reason: 'caller says the hosts list is empty' }, { cookie: support.cookie })
+      assert.equal(r.status, 200)
+      assert.equal((await r.json()).minutes, 30)
+      assert.equal(await auditCount(), before + 1)
+      const view = cookieOf(r)
+      assert.match(view, /^chqin_staff=/)
+      const opts = { cookie: view, origin: STAFF, admin: false }
+
+      // Reads work, as the owner sees them, and say it's a view.
+      const me = await (await call('GET', '/staff/me', null, opts)).json()
+      assert.equal(me.role, 'owner')
+      assert.equal(me.readOnlyView, true)
+      assert.equal((await call('GET', '/staff/hosts', null, opts)).status, 200)
+
+      // Every write is refused, in each of the /staff routers.
+      for (const [p, b] of [
+        ['/staff/property', { name: 'Hijacked' }],
+        ['/staff/hosts', { name: 'Intruder' }],
+        ['/staff/entry-settings', { identity: 'basic' }],
+        ['/staff/rooms', { rooms: [{ number: '101' }] }],
+      ]) {
+        const w = await call('POST', p, b, opts)
+        assert.equal(w.status, 403, p)
+        assert.equal((await w.json()).error, 'read_only_view')
+      }
+      // Leaving the view still works: logout sits above the guard.
+      assert.equal((await call('POST', '/staff/logout', {}, opts)).status, 200)
+      assert.equal((await call('GET', '/staff/me', null, opts)).status, 401)
+
+      // A venue nobody works at has nothing to view.
+      const [empty] = await db
+        .insert(S.venues)
+        .values({ name: `Empty IT ${stamp}`, kind: 'office', timezone: 'Asia/Kolkata' })
+        .returning()
+      assert.equal((await call('POST', `/admin/venues/${empty.id}/view-as`, { reason: 'x' }, { cookie: owner.cookie })).status, 409)
+    })
+
     await t.test('a TOTP code works once', async () => {
       const email = `it-admin-replay-${stamp}@test.dev`
       const { secret, id } = await createAdmin({ email, name: 'Replay', role: 'support', password: 'a-long-admin-password' })

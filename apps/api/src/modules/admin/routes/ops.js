@@ -25,6 +25,7 @@ const TABLES = {
   approvals: ['venue', 'approved', 'declined', 'undecided', 'avgWaitSeconds'],
   journeys: ['journey', 'entries'],
   identity: ['method', 'result', 'checks'],
+  aadhaar: ['venue', 'kind', 'access', 'otps', 'verified', 'notCompleted', 'simulated'],
 }
 
 opsRoutes.get('/reports.csv', WRITE, async (c) => {

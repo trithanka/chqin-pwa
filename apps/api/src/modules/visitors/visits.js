@@ -1,7 +1,8 @@
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { db } from '../../shared/db/client.js'
 import { entrySessions, eventEvents, gates, guests, venues, visitHosts } from '../../shared/db/schema.js'
-import { notFound } from '../../shared/lib/errors.js'
+import { ApiError, notFound } from '../../shared/lib/errors.js'
+import { aadhaarAllowed } from '../entry/index.js'
 
 /**
  * What a venue that hosts visitors sees and manages: who is waiting, who came
@@ -174,10 +175,21 @@ export async function getEntrySettings(venueId) {
     .where(and(eq(gates.venueId, venueId), eq(gates.status, 'active')))
     .orderBy(gates.createdAt)
     .limit(1)
-  return { identity: row?.identity ?? 'basic' }
+  const aadhaarAccess = await venueAadhaarAccess(venueId)
+  // Without access the gates' stored choice is moot: everyone gets the basic form.
+  return { identity: aadhaarAccess ? (row?.identity ?? 'basic') : 'basic', aadhaarAccess }
+}
+
+/** Whether ChqIn Admin has given this venue Aadhaar verification. */
+async function venueAadhaarAccess(venueId) {
+  const [venue] = await db.select({ settings: venues.settings }).from(venues).where(eq(venues.id, venueId))
+  return aadhaarAllowed(venue?.settings)
 }
 
 export async function saveEntrySettings(venueId, { identity }) {
+  if (identity === 'aadhaar' && !(await venueAadhaarAccess(venueId))) {
+    throw new ApiError('aadhaar_not_enabled', 'Aadhaar verification is not enabled for this venue. Ask ChqIn to turn it on.', 403)
+  }
   await db
     .update(gates)
     .set({ config: sql`${gates.config} || ${JSON.stringify({ identity })}::jsonb` })

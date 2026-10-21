@@ -71,8 +71,8 @@ These tables belong to the ChqIn team, not to any venue. They are kept apart fro
 
 | Table | Purpose |
 | --- | --- |
-| `admin_users` | An admin account. The email is stored keyed-hashed and encrypted. Password (scrypt), role (`owner`, `support` or `read_only`), status (`invited`, `active` or `disabled`), and a TOTP secret encrypted with `ENCRYPTION_KEY`. `totp_last_step` stops a code from working twice. |
-| `admin_sessions` | Revocable server-side sessions. The token is stored as a SHA-256 hash. `mfa_at` stays null until the TOTP code is accepted. They expire after 30 minutes idle or 8 hours in total. |
+| `admin_users` | An admin account. The email is stored keyed-hashed and encrypted. Password (scrypt), role (`owner`, `support` or `read_only`), status (`invited`, `active` or `disabled`), and a TOTP secret encrypted with `ENCRYPTION_KEY`, used only when `ADMIN_REQUIRE_2FA` is on. `totp_last_step` stops a code from working twice. The env owner (`ADMIN_EMAIL`) is synced into this table at startup. |
+| `admin_sessions` | Revocable server-side sessions. The token is stored as a SHA-256 hash. `mfa_at` stays null until the TOTP code is accepted (when 2FA is off, the session is full from the password step). They expire after 30 minutes idle or 8 hours in total. |
 | `admin_tokens` | Single-use invite and 2FA-reset links, stored hashed. |
 | `admin_audit_log` | Append-only, with no foreign keys (the same reasoning as `auth_events`). Each row records who did it, their role, the action, the target, the venue, the reason, the before and after values of changed fields, the IP and the user agent. It is written in the same transaction as the change it describes. |
 
@@ -98,7 +98,7 @@ Used by any venue that hosts visitors or runs events, The Nest first. Named for 
 | `event_entry_details` | What an event arrival adds to an entry: event, company, designation. |
 | `outbox` | Notifications waiting to go out, for every kind of gate. Written in the same transaction as what caused them and sent by a worker afterwards. Status: pending, sent, failed, or cancelled (by an admin, so the row still says it existed). |
 
-How a venue identifies people is a setting on its gates (`gates.config.identity`): `basic` (a name and a mobile number, recorded as method `basic` and never claimed as verified) or `aadhaar`. A hotel always uses Aadhaar.
+How a venue identifies people is decided in two places. ChqIn Admin gives or takes away Aadhaar per venue (`venues.settings.aadhaarAccess`, on unless set to `false`). Without it, everyone, hotel guests included, gives a name, date of birth and address (mobile optional), recorded as method `basic` and never claimed as verified, and no Aadhaar OTP can be requested. With it, a hotel always uses Aadhaar, and any other venue picks `basic` or `aadhaar` on its gates (`gates.config.identity`).
 
 ### Hotel tables (`hotel_`)
 

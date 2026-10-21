@@ -29,12 +29,18 @@ const OPEN = ['in_progress', 'waiting']
 export const touch = () => ({ version: sql`${entrySessions.version} + 1`, updatedAt: new Date() })
 
 /**
- * How this gate identifies people. A hotel always uses Aadhaar — its register
- * is a legal record. Any other flow follows the gate's own setting and, unset,
- * asks only for a name and number.
+ * How this gate identifies people. ChqIn Admin decides per venue whether Aadhaar
+ * is available at all (`settings.aadhaarAccess`, on unless set to false); without
+ * it everyone gives a name, date of birth and address. With it, a hotel always
+ * uses Aadhaar — its register is a legal record — and any other flow follows the
+ * gate's own setting, which unset means basic.
  */
+export const aadhaarAllowed = (settings) => settings?.aadhaarAccess !== false
+
 const identityMethodOf = (row) =>
-  row.flowKey === 'hotel' ? 'aadhaar' : (row.gateConfig?.identity ?? 'basic')
+  !aadhaarAllowed(row.venueSettings) ? 'basic'
+  : row.flowKey === 'hotel' ? 'aadhaar'
+  : (row.gateConfig?.identity ?? 'basic')
 
 /** Session joined to its venue and booking, whatever state it's in. */
 export async function loadAny(sessionId) {

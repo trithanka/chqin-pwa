@@ -3,25 +3,30 @@
 ChqIn Admin is the ChqIn team's internal panel for the whole platform. With it you can run every venue, gate, flow, staff account, guest record, entry, session and notification, at every kind of venue. It is not the venue dashboard, and venue staff can never reach it.
 
 - The app is `apps/admin`: React, Vite and Tailwind, on port 5175 in development.
-- The API is `/admin` in `apps/api`, under `src/routes/admin/` and `src/services/admin/`.
+- The API is `/admin` in `apps/api`, in the `src/modules/admin/` module.
+- Live at `https://admin.chqin.in` (its own Vercel project, root `apps/admin`), talking to `https://api2.chqin.in`.
 - The design is in [superpowers/specs/2026-10-14-chqin-admin-design.md](superpowers/specs/2026-10-14-chqin-admin-design.md).
 - The tables are covered in [data-model.md](data-model.md).
 
 ## Getting in
 
-Signing in takes three things: an email and password, a six-digit code from an authenticator app (TOTP), and a request from an allowed IP address.
+Signing in is an email and password. Two extra layers are **optional and off by default**: a six-digit authenticator code (`ADMIN_REQUIRE_2FA=true`) and an IP allow-list (`ADMIN_IP_ALLOWLIST`, where `*` means open to any IP). Turn both on before the team grows or the password is shared.
 
 | Layer | What it does |
 | --- | --- |
-| IP allow-list | `ADMIN_IP_ALLOWLIST` holds IPs and CIDRs. A request from anywhere else gets a 404, so `/admin` looks absent. In production an empty list fails closed: `/admin` answers 404 to everyone, and the API logs a warning at boot. |
+| IP allow-list (optional) | `ADMIN_IP_ALLOWLIST` holds IPs and CIDRs, or `*` for any IP. A request from anywhere else gets a 404, so `/admin` looks absent. In production an empty list fails closed: `/admin` answers 404 to everyone, and the API logs a warning at boot. |
 | Admin client header | Every `/admin` request must carry `x-chqin-admin: 1`. That forces a CORS preflight, and `/admin` passes preflight only from `ADMIN_ORIGINS`. This is what stops `business.chqin.in` or `app.chqin.in`, which share our site, from posting to `/admin` with the cookie attached. |
 | Session | The `chqin_admin` cookie: `Path=/admin`, `HttpOnly`, `SameSite=Strict`. It is backed by `admin_sessions`, and revoking a session takes effect on the next request. It expires after 30 minutes idle or 8 hours in total. A session with only the password lasts 5 minutes and can reach nothing except the code step. |
-| Second factor | A RFC 6238 TOTP code. A code is accepted once only. Five failures (password or code) lock the account for 15 minutes. |
+| Second factor (optional) | Only when `ADMIN_REQUIRE_2FA=true`. A RFC 6238 TOTP code, accepted once only. With it off, a correct password gives a full session straight away (the login answers `next: 'done'`). Five failures (password or code) lock the account for 15 minutes. |
 | Role | Checked on each route. |
 
-**Admin and staff sessions never mix.** They use different cookies, tables and middleware. `/admin` never reads `chqin_staff`, `/staff` never reads `chqin_admin`, and CORS keeps each origin to its own API. The integration test checks both directions.
+**Admin and staff sessions never mix.** They use different cookies, tables and middleware. `/admin` never reads `chqin_staff` (it only ever sets one, for a read-only view, below), `/staff` never reads `chqin_admin`, and CORS keeps each origin to its own API. The integration test checks both directions.
 
 ### The first owner
+
+Simplest: set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in the API's `.env`. On startup the API creates or updates that owner (`syncEnvAdmin`), so changing the password in `.env` and restarting is how you rotate it. Use a long random password, because nothing else guards the login while 2FA and the IP list are off.
+
+Or, with the script:
 
 ```sh
 ADMIN_PASSWORD='…at least 12 characters…' npm run admin:create --workspace @chqin/api -- \
@@ -33,6 +38,23 @@ The script prints the TOTP secret and an `otpauth://` URI once. Add it to an aut
 ### Everyone after that
 
 An owner invites them from **Admin users**. The panel shows the invite link once. Send it yourself: it is never emailed, stored or logged. The person opening it chooses a password, scans the QR code and confirms a code. An owner can also reset someone's two-factor, which ends all their sessions and issues a new enrolment link.
+
+## Aadhaar per venue
+
+On a venue's page, **Turn Aadhaar off / on** (reason required, audited as `venue.aadhaar_off` / `venue.aadhaar_on`). Off means every guest and visitor there gives a name, date of birth and address instead, and the venue's dashboard can't choose Aadhaar. Unset means on, so existing venues keep what they had.
+
+## Viewing a venue's dashboard
+
+**View dashboard** on a venue's page opens the business dashboard as that venue's owner sees it, read-only, for 30 minutes. Support and owners only, with a reason, recorded as `venue.view_as`: the dashboard shows guest details unmasked.
+
+- The view is a normal staff session marked with the admin's id (`staff_sessions.admin_id`, migration 0018). The `/staff` guard refuses every request on it except GET, HEAD and OPTIONS (`read_only_view`), ahead of all three `/staff` routers.
+- The admin request sets the `chqin_staff` cookie on the API host, which the dashboard calls too, so no token goes in a URL. It replaces any venue sign-in in that browser.
+- The dashboard shows a "ChqIn view · read-only" bar; Exit signs out.
+- `DASHBOARD_URL` on the API is where the button sends you.
+
+## Aadhaar usage
+
+Reports → **Aadhaar usage by venue**: OTPs sent (each one a paid provider call, whether or not the guest finishes), verified, not completed, and simulated checks counted apart. Confirm with the provider whether wrong-code retries are billed too; the report counts OTP requests only.
 
 ## Roles
 
@@ -150,22 +172,20 @@ Personal data goes; the record that someone entered stays.
 | --- | --- |
 | `ADMIN_ORIGINS` | The admin app's origins. Default `http://localhost:5175`. Production: `https://admin.chqin.in`. |
 | `ADMIN_URL` | Where invite and reset links point. |
-| `ADMIN_IP_ALLOWLIST` | IPs and CIDRs, comma-separated. In production, while it is empty, `/admin` is closed to everyone. |
-| `ADMIN_CLIENT_IP_HEADER` | The header that carries the real client IP behind the proxy. Unset means the socket address is used. **Never** use `x-forwarded-for`: Render appends to it, so its first entry is whatever the client sent. |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | The owner account, created or updated at startup. |
+| `ADMIN_REQUIRE_2FA` | `true` to demand an authenticator code. Default `false`. |
+| `ADMIN_IP_ALLOWLIST` | IPs and CIDRs, comma-separated, or `*` for any. In production, while it is empty, `/admin` is closed to everyone. |
+| `ADMIN_CLIENT_IP_HEADER` | The header that carries the real client IP behind the proxy. Unset means the socket address is used. **Never** use `x-forwarded-for`: a proxy appends to it, so its first entry is whatever the client sent. |
 | `ADMIN_ALLOW_DESTRUCTIVE` | Allows venue delete and guest erase on a hosted database. Off by default. |
 
 The admin app needs `VITE_API_URL` and, for the QR links on gates, `VITE_GUEST_APP_URL`.
 
-## Before going live
+## Going live (done for chqin.in)
 
-1. **Confirm the client IP header on Render before enabling the allow-list.**
-   1. Deploy with a temporary log of the request headers.
-   2. Send a request carrying a forged `X-Forwarded-For`.
-   3. Pick the header that shows your real address and not the forged one. On Render, behind Cloudflare, that is expected to be `true-client-ip` or `cf-connecting-ip`, but verify it.
-   4. Set `ADMIN_CLIENT_IP_HEADER` to that header.
-2. Add `ADMIN_ORIGINS`, `ADMIN_URL`, `ADMIN_IP_ALLOWLIST` and `ADMIN_CLIENT_IP_HEADER` on Render. Until the allow-list is set, the API starts normally but `/admin` answers 404.
-3. Create a Vercel project for `apps/admin` with `VITE_API_URL=https://api2.chqin.in` and `VITE_GUEST_APP_URL=https://app.chqin.in`, on the `admin.chqin.in` domain. It must share the registrable domain with the API, because the cookie is `SameSite=Strict`.
-4. Run `admin:create` once against production.
+1. API on the Oracle VM: set `ADMIN_ORIGINS=https://admin.chqin.in`, `ADMIN_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and `ADMIN_IP_ALLOWLIST=*`. nginx forwards `X-Real-IP`. Restart `chqin-api`.
+2. Vercel project for `apps/admin` (config in `apps/admin/vercel.json`) with `VITE_API_URL=https://api2.chqin.in` and `VITE_GUEST_APP_URL=https://app.chqin.in`, both left non-sensitive because Vite bakes them into the bundle. Add the domain `admin.chqin.in`. It must share the registrable domain with the API, because the cookie is `SameSite=Strict`.
+3. DNS at GoDaddy: a CNAME for `admin` to Vercel. The `_vercel` TXT record is only for ownership and can be deleted once the domain shows valid.
+4. To lock it down later: set `ADMIN_REQUIRE_2FA=true`, replace `*` with real IPs, and confirm the client-IP header first (`ADMIN_CLIENT_IP_HEADER`, never `x-forwarded-for`).
 
 ## Known limits
 

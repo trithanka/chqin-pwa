@@ -46,7 +46,7 @@ export const api = {
   stayRequest: (sessionId, service, note) =>
     request('/stay/request', { sessionId, service, ...(note ? { note } : {}) }),
   detect: (sessionId, knownCredentialIds) => request('/detect', { sessionId, knownCredentialIds }),
-  basicIdentity: (sessionId, name, phone) => request('/identity/basic', { sessionId, name, phone }),
+  basicIdentity: (sessionId, details) => request('/identity/basic', { sessionId, ...details }),
   verifyIdentity: (sessionId) => request('/identity/verifications', { sessionId }),
   requestAadhaarOtp: (sessionId, aadhaar) => request('/identity/aadhaar/otp', { sessionId, aadhaar }),
   verifyAadhaarOtp: (payload) => request('/identity/aadhaar/verify', payload),

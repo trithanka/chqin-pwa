@@ -63,6 +63,10 @@ export const staffSessions = pgTable(
       .references(() => venues.id, { onDelete: 'cascade' }),
     role: text('role').notNull(),
     tokenHash: bytea('token_hash').notNull(),
+    // Set when ChqIn Admin opened this session to look at the venue's
+    // dashboard. The /staff guard refuses every write on it. The foreign key
+    // to admin_users lives in migration 0018 only: no module may depend on admin.
+    adminId: uuid('admin_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),

@@ -154,6 +154,44 @@ export function VenueDetail() {
       onSubmit: ({ reason }) => api.post(`/venues/${id}/status`, { status: v.status === 'active' ? 'suspended' : 'active', reason }),
     })
 
+  // Unset means on: venues that predate the switch keep what they had.
+  const aadhaarOn = v?.settings?.aadhaarAccess !== false
+  const toggleAadhaar = () =>
+    act({
+      title: aadhaarOn ? `Turn off Aadhaar for ${v.name}` : `Turn on Aadhaar for ${v.name}`,
+      danger: aadhaarOn,
+      description: aadhaarOn
+        ? 'New guests and visitors give their name, date of birth and address instead of verifying with Aadhaar. This applies to hotels too. Anyone mid check-in keeps the step they are on.'
+        : 'The venue can verify people with Aadhaar again. A hotel uses it for every guest; other venues choose it in their dashboard.',
+      reason: 'required',
+      submitLabel: aadhaarOn ? 'Turn off' : 'Turn on',
+      onSubmit: ({ reason }) => api.post(`/venues/${id}/aadhaar`, { enabled: !aadhaarOn, reason }),
+    })
+
+  const viewAs = () =>
+    act({
+      title: `View ${v.name}'s dashboard`,
+      description:
+        'Opens their business dashboard as the owner sees it, read-only, for 30 minutes. Guest details there are not masked, so this is recorded in the audit log. It replaces any venue dashboard sign-in in this browser.',
+      reason: 'required',
+      submitLabel: 'Open dashboard',
+      onSubmit: async ({ reason }) => {
+        const { url } = await api.post(`/venues/${id}/view-as`, { reason })
+        window.open(url, '_blank', 'noopener')
+        return {
+          show: (
+            <p className="text-[13px] text-stone-300">
+              Opened in a new tab. If it was blocked,{' '}
+              <a href={url} target="_blank" rel="noopener noreferrer" className="text-amber-300 hover:underline">
+                open the dashboard
+              </a>
+              .
+            </p>
+          ),
+        }
+      },
+    })
+
   const remove = () =>
     act({
       title: `Delete ${v.name}`,
@@ -217,6 +255,8 @@ export function VenueDetail() {
                   <>
                     <Button onClick={editProfile}>Edit profile</Button>
                     <Button onClick={editSettings}>Edit settings</Button>
+                    <Button onClick={viewAs}>View dashboard</Button>
+                    <Button onClick={toggleAadhaar}>{aadhaarOn ? 'Turn Aadhaar off' : 'Turn Aadhaar on'}</Button>
                     {v.status !== 'closed' && <Button onClick={suspend}>{v.status === 'active' ? 'Suspend' : 'Reactivate'}</Button>}
                     {isOwner(admin) && <Button tone="danger" onClick={remove}>Delete</Button>}
                   </>
@@ -234,6 +274,7 @@ export function VenueDetail() {
                       ['Kind', v.kind],
                       ['Timezone', v.timezone],
                       ['Status', <Status key="s" value={v.status} />],
+                      ['Aadhaar', aadhaarOn ? 'On — verified with an OTP' : 'Off — name, date of birth and address'],
                       ['Retention', v.retentionDays ? `${v.retentionDays} days` : 'default for the kind'],
                       ['Entries', d.totals.entries],
                       ['Sessions', d.totals.sessions],

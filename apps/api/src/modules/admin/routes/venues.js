@@ -2,7 +2,10 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { VENUE_KINDS, phoneSchema } from '@chqin/shared'
 import { body } from '../../../shared/lib/validate.js'
-import { adminWrite } from '../services/audit.js'
+import { setCookie } from 'hono/cookie'
+import { config } from '../../../config.js'
+import { COOKIE, VIEW_SECONDS, cookieOptions, issue } from '../../../shared/lib/session.js'
+import { adminRecord, adminWrite } from '../services/audit.js'
 import { pageOf, pageParams } from '../services/util.js'
 import {
   createGate,
@@ -18,6 +21,8 @@ import {
   setGateStatus,
   setVenueStatus,
   updateGate,
+  setAadhaarAccess,
+  viewAsTarget,
   updateSettings,
   updateVenue,
 } from '../services/venues.js'
@@ -126,6 +131,48 @@ venueRoutes.post('/venues/:id/settings', WRITE, body(settingsRequest), async (c)
       updateSettings(tx, id, settings),
     ),
   )
+})
+
+// Changes what every guest at the venue is asked to prove: a reason, always.
+venueRoutes.post(
+  '/venues/:id/aadhaar',
+  WRITE,
+  body(z.object({ enabled: z.boolean(), reason: z.string().max(500) })),
+  async (c) => {
+    const id = c.req.param('id')
+    const { enabled, reason: why } = c.get('body')
+    return c.json(
+      await adminWrite(
+        c,
+        { action: enabled ? 'venue.aadhaar_on' : 'venue.aadhaar_off', targetType: 'venue', targetId: id, reason: why, needsReason: true },
+        (tx) => setAadhaarAccess(tx, id, enabled),
+      ),
+    )
+  },
+)
+
+/**
+ * Open the venue's dashboard as its owner sees it, read-only, for 30 minutes.
+ * Support and owners only: the dashboard shows guests unmasked, so this is an
+ * audited look at personal data, like a reveal. The staff cookie is set on
+ * the API's own host, which the dashboard calls too, so no token travels in
+ * a URL. It replaces any staff session this browser already had.
+ */
+venueRoutes.post('/venues/:id/view-as', WRITE, body(z.object({ reason: z.string().max(500) })), async (c) => {
+  const venueId = c.req.param('id')
+  const target = await viewAsTarget(venueId)
+  await adminRecord(c, {
+    action: 'venue.view_as',
+    targetType: 'venue',
+    targetId: venueId,
+    venueId,
+    reason: c.get('body').reason,
+    needsReason: true,
+    changes: { staffId: target.staffId, minutes: VIEW_SECONDS / 60 },
+  })
+  const token = await issue({ ...target, venueId, adminId: c.get('admin').adminId })
+  setCookie(c, COOKIE, token, cookieOptions(c, VIEW_SECONDS))
+  return c.json({ url: config.DASHBOARD_URL, minutes: VIEW_SECONDS / 60 })
 })
 
 venueRoutes.post(
