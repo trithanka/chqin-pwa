@@ -8,6 +8,7 @@ import {
   identityVerifications,
 } from '../../shared/db/schema.js'
 import { notFound } from '../../shared/lib/errors.js'
+import { bookingsQuery } from './hotelBookings.js'
 
 /** A hotel's guests and their stays. */
 
