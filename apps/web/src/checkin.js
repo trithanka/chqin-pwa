@@ -27,10 +27,14 @@ export async function start(token) {
     flow: session.flow,
     // How this gate identifies people: 'basic' (name, date of birth, address) or 'aadhaar'.
     identity: session.identity,
+    // What the venue's details form asks, when identity is basic.
+    identityForm: session.identityForm ?? null,
     venue: session.venue,
     booking: session.booking,
     journey: detection.journey,
     greetingName: detection.greetingName,
+    // Recognised, but this venue wants an Aadhaar check they have never done.
+    needsAadhaar: Boolean(detection.needsAadhaar),
     // One key per session: a retry after a dropped response returns the
     // original check-in instead of making a second one.
     idempotencyKey: uuid(),

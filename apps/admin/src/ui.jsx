@@ -245,7 +245,11 @@ export function Tabs({ tabs, value, onChange }) {
 export function ActionDialog({ action, onClose, onDone }) {
   const { title, description, danger, fields = [], reason, confirmPhrase, submitLabel = 'Confirm', onSubmit } = action
   const [values, setValues] = useState(() =>
-    Object.fromEntries(fields.map((f) => [f.name, f.defaultValue ?? (f.type === 'checkbox' ? false : '')])),
+    Object.fromEntries(
+      fields
+        .filter((f) => f.type !== 'heading')
+        .map((f) => [f.name, f.defaultValue ?? (f.type === 'checkbox' ? false : f.type === 'multi' ? [] : '')]),
+    ),
   )
   const [why, setWhy] = useState('')
   const [typed, setTyped] = useState('')
@@ -298,9 +302,37 @@ export function ActionDialog({ action, onClose, onDone }) {
           <>
             {description && <div className="mb-4 text-[13px] leading-relaxed text-stone-400">{description}</div>}
             <div className="space-y-3">
-              {fields.map((f) => (
+              {fields.map((f) =>
+                f.type === 'heading' ? (
+                  <p key={f.label} className="border-t border-line pt-4 text-[12px] font-semibold uppercase tracking-wide text-stone-400 first:border-0 first:pt-0">
+                    {f.label}
+                  </p>
+                ) : f.type === 'checkbox' ? (
+                  <label key={f.name} className="flex items-center gap-2 text-[13px] text-stone-200">
+                    <input type="checkbox" checked={Boolean(values[f.name])} onChange={(e) => setValues({ ...values, [f.name]: e.target.checked })} />
+                    {f.label}
+                  </label>
+                ) : (
                 <Field key={f.name} label={f.label} hint={f.hint}>
-                  {f.type === 'select' ? (
+                  {f.type === 'multi' ? (
+                    <div className="flex flex-wrap gap-x-4 gap-y-2 pt-1">
+                      {f.options.map((o) => (
+                        <label key={o.value} className="flex items-center gap-1.5 text-[13px] text-stone-200">
+                          <input
+                            type="checkbox"
+                            checked={values[f.name].includes(o.value)}
+                            onChange={(e) =>
+                              setValues({
+                                ...values,
+                                [f.name]: e.target.checked ? [...values[f.name], o.value] : values[f.name].filter((x) => x !== o.value),
+                              })
+                            }
+                          />
+                          {o.label}
+                        </label>
+                      ))}
+                    </div>
+                  ) : f.type === 'select' ? (
                     <Select value={values[f.name]} onChange={(e) => setValues({ ...values, [f.name]: e.target.value })}>
                       {f.options.map((o) => (
                         <option key={o.value} value={o.value}>
@@ -319,7 +351,8 @@ export function ActionDialog({ action, onClose, onDone }) {
                     />
                   )}
                 </Field>
-              ))}
+                ),
+              )}
               {reason && (
                 <Field label={reason === 'optional' ? 'Reason (optional)' : 'Reason'} hint="Saved in the audit log with your name.">
                   <Input value={why} onChange={(e) => setWhy(e.target.value)} placeholder="Why is this being done?" />

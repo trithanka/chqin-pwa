@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
+import { identityFormSchema } from '@chqin/shared'
 import { phoneSchema } from '@chqin/shared'
 import { body } from '../../../shared/lib/validate.js'
 import { respond } from '../progress.js'
@@ -70,6 +71,9 @@ visitorStaff.post('/events/:id/active', body(z.object({ active: z.boolean() })),
 
 visitorStaff.get('/entry-settings', async (c) => c.json(await getEntrySettings(venueOf(c))))
 
-visitorStaff.post('/entry-settings', body(z.object({ identity: z.enum(['basic', 'aadhaar']) })), async (c) =>
+visitorStaff.post(
+  '/entry-settings',
+  body(z.object({ identity: z.enum(['basic', 'aadhaar']).optional(), identityForm: identityFormSchema.optional() })),
+  async (c) =>
   c.json(await saveEntrySettings(venueOf(c), c.get('body'))),
 )

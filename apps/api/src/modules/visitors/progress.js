@@ -11,7 +11,8 @@ import {
 } from '../../shared/db/schema.js'
 import { conflict, notFound } from '../../shared/lib/errors.js'
 import { advance } from '../entry/index.js'
-import { loadFlow } from '../entry/index.js'
+import { loadAny, loadFlow } from '../entry/index.js'
+import { requireIdentityMet } from '../identity/index.js'
 import { messagesFor } from './notify.js'
 import { enqueue } from '../../shared/outbox/outbox.js'
 import { touch } from '../entry/index.js'
@@ -202,6 +203,7 @@ export async function submit(sessionId, values) {
   return transaction(async (tx) => {
     const row = await lockSession(tx, sessionId)
     if (!row) throw notFound()
+    if (row.guestId) await requireIdentityMet((await loadAny(sessionId))?.identityMethod, row.guestId)
     // A finished session is read back as it stands, not re-run.
     const { flow, out, deps } = await run(tx, row, values ? { values } : {})
     return viewOf(tx, flow, out, deps, row)

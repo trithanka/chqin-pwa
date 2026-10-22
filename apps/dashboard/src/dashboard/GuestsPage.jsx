@@ -244,6 +244,12 @@ export function GuestDetailPage() {
                 <span className="text-slate-400">Not recorded</span>
               )}
             </DetailRow>
+            {/* The venue's own questions, answered at check-in. */}
+            {Object.entries(guest.extra ?? {}).map(([question, answer]) => (
+              <DetailRow key={question} label={question}>
+                {answer}
+              </DetailRow>
+            ))}
           </div>
 
           <p className="rounded-lg bg-slate-50 p-3 text-[12px] leading-relaxed text-slate-500 border border-slate-200/60">

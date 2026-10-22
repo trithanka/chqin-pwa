@@ -344,7 +344,7 @@ export async function recordDocumentCapture(session) {
  * claimed as verified — so a venue that needs more turns Aadhaar on instead.
  * The passkey enrolled afterwards still makes the next visit instant.
  */
-export async function recordBasicIdentity(session, { name, dateOfBirth, address, phone }) {
+export async function recordBasicIdentity(session, { name, dateOfBirth, address, phone, extra }) {
   if (session.identityMethod !== 'basic') {
     throw new ApiError('verification_required', 'Complete the identity check to continue.', 403)
   }
@@ -360,11 +360,40 @@ export async function recordBasicIdentity(session, { name, dateOfBirth, address,
       subjectDob: dateOfBirth,
       // Free text as typed, under `street` so the register's address
       // formatter shows it on the first line like a UIDAI address.
-      subjectAddress: { street: address },
+      subjectAddress: address ? { street: address } : null,
+      subjectExtra: extra ?? null,
       verifiedAt: new Date(),
     })
     .returning({ id: identityVerifications.id })
 
   await ensureSessionGuest(session, { name, dateOfBirth, phone })
   return { verificationId: row.id, subject: { name, simulated: false } }
+}
+
+/**
+ * Whether this person has ever passed an Aadhaar check, anywhere. A passkey made
+ * after a name-and-address check proves the device, not the person, so an
+ * Aadhaar venue asks for Aadhaar once before that passkey is enough there.
+ */
+export async function aadhaarVerified(guestId) {
+  if (!guestId) return false
+  const [row] = await db
+    .select({ id: identityVerifications.id })
+    .from(identityVerifications)
+    .where(
+      and(
+        eq(identityVerifications.guestId, guestId),
+        eq(identityVerifications.method, 'aadhaar_otp'),
+        eq(identityVerifications.result, 'passed'),
+      ),
+    )
+    .limit(1)
+  return Boolean(row)
+}
+
+/** Refuses to admit someone an Aadhaar venue hasn't seen pass Aadhaar yet. */
+export async function requireIdentityMet(identityMethod, guestId) {
+  if (identityMethod === 'aadhaar' && guestId && !(await aadhaarVerified(guestId))) {
+    throw new ApiError('aadhaar_required', 'This venue needs a one-time Aadhaar check.', 403)
+  }
 }

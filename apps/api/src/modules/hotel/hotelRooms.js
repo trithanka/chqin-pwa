@@ -14,7 +14,7 @@ import {
 import { decrypt } from '../../shared/lib/crypto.js'
 import { roomReady } from './hotelNotify.js'
 import { enqueue } from '../../shared/outbox/outbox.js'
-import { conflict, notFound } from '../../shared/lib/errors.js'
+import { conflict, invalid, notFound } from '../../shared/lib/errors.js'
 
 /** A hotel's rooms, and giving one to a guest who checked in without a reservation. */
 
@@ -102,6 +102,11 @@ export async function assignRoom(venueId, checkinId, roomIds) {
       .limit(1)
 
     if (!stay) throw notFound('No such check-in here.')
+    // All the rooms the guest asked for, or none (clearing). Never part of a request.
+    const requested = Math.max(stay.roomsCount ?? 1, 1)
+    if (wanted.length && wanted.length !== requested) {
+      throw invalid(`Pick all ${requested} rooms the guest asked for.`)
+    }
 
     let bookingId = stay.bookingId
 

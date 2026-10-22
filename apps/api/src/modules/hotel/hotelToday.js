@@ -37,8 +37,9 @@ export async function overview(venueId) {
       roomIds: sql`case when ${hotelEntryDetails.roomId} is null then '{}'::uuid[] else array[${hotelEntryDetails.roomId}] end`,
       room: hotelRooms.number,
       roomType: sql`null`,
-      arrival: sql`${today}`,
-      departure: sql`null`,
+      arrival: sql`${entries.enteredAt}::date::text`,
+      // What the guest asked for on the stay screen; one night when they weren't asked.
+      departure: sql`(${entries.enteredAt}::date + greatest(coalesce(${hotelEntryDetails.nights}, 1), 1))::text`,
       status: sql`'checked_in'`,
       source: sql`null`,
       checkedInAt: entries.enteredAt,

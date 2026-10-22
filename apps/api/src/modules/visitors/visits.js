@@ -2,6 +2,7 @@ import { and, desc, eq, sql } from 'drizzle-orm'
 import { db } from '../../shared/db/client.js'
 import { entrySessions, eventEvents, gates, guests, venues, visitHosts } from '../../shared/db/schema.js'
 import { ApiError, notFound } from '../../shared/lib/errors.js'
+import { identityFormOf } from '@chqin/shared'
 import { aadhaarAllowed } from '../entry/index.js'
 
 /**
@@ -175,24 +176,42 @@ export async function getEntrySettings(venueId) {
     .where(and(eq(gates.venueId, venueId), eq(gates.status, 'active')))
     .orderBy(gates.createdAt)
     .limit(1)
-  const aadhaarAccess = await venueAadhaarAccess(venueId)
-  // Without access the gates' stored choice is moot: everyone gets the basic form.
-  return { identity: aadhaarAccess ? (row?.identity ?? 'basic') : 'basic', aadhaarAccess }
-}
-
-/** Whether ChqIn Admin has given this venue Aadhaar verification. */
-async function venueAadhaarAccess(venueId) {
-  const [venue] = await db.select({ settings: venues.settings }).from(venues).where(eq(venues.id, venueId))
-  return aadhaarAllowed(venue?.settings)
-}
-
-export async function saveEntrySettings(venueId, { identity }) {
-  if (identity === 'aadhaar' && !(await venueAadhaarAccess(venueId))) {
-    throw new ApiError('aadhaar_not_enabled', 'Aadhaar verification is not enabled for this venue. Ask ChqIn to turn it on.', 403)
+  const venue = await venueOf(venueId)
+  const aadhaarAccess = aadhaarAllowed(venue?.settings)
+  const hotel = venue?.kind === 'hotel'
+  // What visitors actually get. Without access the gates' stored choice is
+  // moot; a hotel with access always uses Aadhaar.
+  const identity = !aadhaarAccess ? 'basic' : hotel ? 'aadhaar' : (row?.identity ?? 'basic')
+  return {
+    identity,
+    aadhaarAccess,
+    // A hotel doesn't choose: ChqIn Admin's switch decides.
+    canChoose: aadhaarAccess && !hotel,
+    identityForm: identityFormOf(venue?.settings),
   }
-  await db
-    .update(gates)
-    .set({ config: sql`${gates.config} || ${JSON.stringify({ identity })}::jsonb` })
-    .where(eq(gates.venueId, venueId))
-  return { identity }
+}
+
+const venueOf = async (venueId) =>
+  (await db.select({ kind: venues.kind, settings: venues.settings }).from(venues).where(eq(venues.id, venueId)))[0]
+
+export async function saveEntrySettings(venueId, { identity, identityForm }) {
+  const venue = await venueOf(venueId)
+  if (identity) {
+    if (identity === 'aadhaar' && !aadhaarAllowed(venue?.settings)) {
+      throw new ApiError('aadhaar_not_enabled', 'Aadhaar verification is not enabled for this venue. Ask ChqIn to turn it on.', 403)
+    }
+    if (venue?.kind !== 'hotel') {
+      await db
+        .update(gates)
+        .set({ config: sql`${gates.config} || ${JSON.stringify({ identity })}::jsonb` })
+        .where(eq(gates.venueId, venueId))
+    }
+  }
+  if (identityForm) {
+    await db
+      .update(venues)
+      .set({ settings: sql`COALESCE(${venues.settings}, '{}'::jsonb) || ${JSON.stringify({ identityForm })}::jsonb` })
+      .where(eq(venues.id, venueId))
+  }
+  return getEntrySettings(venueId)
 }

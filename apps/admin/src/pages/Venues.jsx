@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Plus } from 'lucide-react'
+import { GUEST_SERVICES, VENUE_KINDS } from '@chqin/shared'
 import { api } from '../api'
 import { canWrite, isOwner, useSession } from '../session'
 import { useApi, usePaged } from '../useApi'
@@ -9,7 +10,6 @@ import {
   Button,
   Id,
   Input,
-  Json,
   Mono,
   PageHeader,
   PagedTable,
@@ -88,7 +88,7 @@ export default function Venues() {
           { label: 'Venue', render: (v) => <><p className="text-white">{v.name}</p><Id value={v.id} /></> },
           { label: 'Kind', render: (v) => <Pill>{v.kind}</Pill> },
           { label: 'City', render: (v) => v.city ?? v.location ?? '—' },
-          { label: 'Owner', render: (v) => <Mono>{v.ownerEmail ?? '—'}</Mono> },
+          { label: 'Login email', render: (v) => <Mono>{v.ownerEmail ?? '—'}</Mono> },
           { label: 'Gates', render: (v) => v.gates },
           { label: 'Last entry', render: (v) => when(v.lastEntryAt) },
           { label: 'Status', render: (v) => <Status value={v.status} /> },
@@ -115,31 +115,109 @@ export function VenueDetail() {
   const v = d?.venue
   const write = canWrite(admin)
 
-  const editProfile = () =>
+  const editProfile = () => {
+    const a = v.address ?? {}
     act({
       title: 'Edit profile',
+      description: 'What the venue gave when it registered.',
       fields: [
-        { name: 'name', label: 'Name', defaultValue: v.name },
-        { name: 'location', label: 'Location', defaultValue: v.location ?? '' },
+        { name: 'name', label: 'Property name', defaultValue: v.name, required: true },
+        { name: 'kind', label: 'Kind', type: 'select', options: VENUE_KINDS.map((k) => ({ value: k, label: k })), defaultValue: v.kind },
+        { type: 'heading', label: 'Address' },
+        { name: 'line1', label: 'Street address', defaultValue: a.line1 ?? '' },
+        { name: 'city', label: 'City', defaultValue: a.city ?? '', required: true },
+        { name: 'country', label: 'Country code', placeholder: 'IN', defaultValue: a.country ?? '' },
+        { name: 'lat', label: 'Latitude', type: 'number', defaultValue: a.lat ?? '' },
+        { name: 'lng', label: 'Longitude', type: 'number', defaultValue: a.lng ?? '' },
+        { type: 'heading', label: 'Operations' },
         { name: 'timezone', label: 'Timezone', defaultValue: v.timezone },
         { name: 'retentionDays', label: 'Entry retention (days, blank = default)', type: 'number', defaultValue: v.retentionDays ?? '' },
-        { name: 'address', label: 'Address (JSON)', type: 'textarea', rows: 5, defaultValue: JSON.stringify(v.address ?? {}, null, 2) },
       ],
       reason: 'optional',
       submitLabel: 'Save',
-      onSubmit: ({ address, retentionDays, ...rest }) =>
-        api.post(`/venues/${id}`, { ...rest, address: parseJson(address), retentionDays: retentionDays === '' ? null : Number(retentionDays) }),
+      onSubmit: ({ line1, city, country, lat, lng, retentionDays, reason, ...rest }) =>
+        api.post(`/venues/${id}`, {
+          ...rest,
+          reason,
+          // Kept beside what registration stored, so keys this form doesn't show survive.
+          address: {
+            ...a,
+            line1: line1.trim(),
+            city: city.trim(),
+            country: country.trim() || undefined,
+            lat: lat === '' ? undefined : Number(lat),
+            lng: lng === '' ? undefined : Number(lng),
+          },
+          location: [line1.trim(), city.trim()].filter(Boolean).join(', ') || null,
+          retentionDays: retentionDays === '' ? null : Number(retentionDays),
+        }),
     })
+  }
 
-  const editSettings = () =>
+  const editSettings = () => {
+    const st = v.settings ?? {}
+    const b = st.business ?? {}
+    const e = st.essentials ?? {}
+    const c = st.contacts ?? {}
+    const hotel = v.kind === 'hotel'
+    const text = (prefix, obj, keys) => keys.map(([k, label, extra]) => ({ name: `${prefix}.${k}`, label, defaultValue: obj[k] ?? '', ...extra }))
     act({
       title: 'Edit settings',
-      description: 'Services, guest essentials, per-service contacts and the business registration (GSTIN, PAN), exactly as stored.',
-      fields: [{ name: 'settings', label: 'Settings (JSON)', type: 'textarea', rows: 16, defaultValue: JSON.stringify(v.settings ?? {}, null, 2) }],
+      description: 'What the venue set up at registration. Leave a box empty to clear it.',
+      fields: [
+        { type: 'heading', label: 'Business registration' },
+        ...text('business', b, [
+          ['legalName', 'Legal name'],
+          ['tradeName', 'Trade name'],
+          ['gstin', 'GSTIN'],
+          ['pan', 'PAN'],
+          ['constitution', 'Constitution'],
+          ['registrationType', 'Registration type'],
+          ['address', 'Registered address'],
+          ['city', 'City'],
+          ['state', 'State'],
+          ['pincode', 'PIN code'],
+        ]),
+        { type: 'heading', label: 'Notifications' },
+        { name: 'reception', label: 'Reception WhatsApp number', placeholder: '+91 98765 43210', defaultValue: st.reception ?? '' },
+        ...(hotel
+          ? [
+              { type: 'heading', label: 'Guest services' },
+              { name: 'services', label: 'Services guests can request', type: 'multi', options: GUEST_SERVICES.map((x) => ({ value: x, label: x })), defaultValue: st.services ?? [] },
+              ...GUEST_SERVICES.map((x) => ({ name: `contacts.${x}`, label: `${x} requests go to`, placeholder: '+91 …', defaultValue: c[x] ?? '' })),
+              { type: 'heading', label: 'Guest essentials' },
+              ...text('essentials', e, [
+                ['wifiSsid', 'Wi-Fi name'],
+                ['wifiPassword', 'Wi-Fi password'],
+                ['breakfastFrom', 'Breakfast from', { type: 'time' }],
+                ['breakfastTo', 'Breakfast until', { type: 'time' }],
+                ['checkoutTime', 'Checkout time', { type: 'time' }],
+                ['notes', 'Notes for guests', { type: 'textarea', rows: 3 }],
+              ]),
+            ]
+          : []),
+      ],
       reason: 'optional',
       submitLabel: 'Save settings',
-      onSubmit: ({ settings, reason }) => api.post(`/venues/${id}/settings`, { settings: parseJson(settings), reason }),
+      onSubmit: ({ reason, reception, services, ...flat }) => {
+        // "business.gstin" → business: { gstin }. Empty boxes are dropped, not saved as "".
+        const group = (prefix) =>
+          Object.fromEntries(
+            Object.entries(flat)
+              .filter(([k, val]) => k.startsWith(`${prefix}.`) && String(val).trim())
+              .map(([k, val]) => [k.slice(prefix.length + 1), String(val).trim()]),
+          )
+        const settings = {
+          // Everything this form doesn't show (Aadhaar access, identity fields…) is kept.
+          ...st,
+          business: { ...group('business'), verified: b.verified ?? false },
+          reception: reception.trim() || null,
+          ...(hotel ? { services, contacts: group('contacts'), essentials: group('essentials') } : {}),
+        }
+        return api.post(`/venues/${id}/settings`, { settings, reason })
+      },
     })
+  }
 
   const suspend = () =>
     act({
@@ -271,6 +349,7 @@ export function VenueDetail() {
                   <Rows
                     items={[
                       ['Id', <Mono key="i">{v.id}</Mono>],
+                      ['Login email', <Mono key="le">{(d.staff.find((s) => s.role === 'owner') ?? d.staff[0])?.email ?? '—'}</Mono>],
                       ['Kind', v.kind],
                       ['Timezone', v.timezone],
                       ['Status', <Status key="s" value={v.status} />],
@@ -281,13 +360,17 @@ export function VenueDetail() {
                       ['Created', when(v.createdAt)],
                     ]}
                   />
-                  <p className="mb-1 mt-4 text-[12px] text-stone-500">Address</p>
-                  <Json value={v.address} />
+                  <p className="mb-1 mt-4 text-[12px] font-semibold text-stone-400">Address</p>
+                  <Rows
+                    items={[
+                      ['Street', v.address?.line1 || '—'],
+                      ['City', v.address?.city || '—'],
+                      ['Country', v.address?.country || '—'],
+                      ['Map pin', v.address?.lat != null ? `${v.address.lat}, ${v.address.lng}` : '—'],
+                    ]}
+                  />
                 </Panel>
-                <Panel className="p-4">
-                  <p className="mb-1 text-[12px] text-stone-500">Settings (services, essentials, business registration)</p>
-                  <Json value={v.settings} className="max-h-[480px]" />
-                </Panel>
+                <SettingsSummary venue={v} />
               </div>
             )}
 
@@ -483,10 +566,64 @@ const MoreLink = ({ to }) => (
   </div>
 )
 
-function parseJson(text) {
-  try {
-    return JSON.parse(text || '{}')
-  } catch {
-    throw new Error('That is not valid JSON.')
-  }
+/** The settings as the venue entered them, readable. Empty sections are left out. */
+function SettingsSummary({ venue }) {
+  const st = venue.settings ?? {}
+  const b = st.business ?? {}
+  const e = st.essentials ?? {}
+  const form = st.identityForm
+  const rows = (pairs) => pairs.filter(([, val]) => val != null && val !== '')
+  const sections = [
+    [
+      'Business registration',
+      rows([
+        ['Legal name', b.legalName],
+        ['Trade name', b.tradeName],
+        ['GSTIN', b.gstin],
+        ['PAN', b.pan],
+        ['Constitution', b.constitution],
+        ['Registered address', [b.address, b.city, b.state, b.pincode].filter(Boolean).join(', ')],
+      ]),
+    ],
+    ['Notifications', rows([['Reception WhatsApp', st.reception]])],
+    [
+      'Guest services',
+      rows([
+        ['Services', (st.services ?? []).join(', ')],
+        ...Object.entries(st.contacts ?? {}).map(([k, val]) => [`${k} requests`, val]),
+      ]),
+    ],
+    [
+      'Guest essentials',
+      rows([
+        ['Wi-Fi', [e.wifiSsid, e.wifiPassword].filter(Boolean).join(' / ')],
+        ['Breakfast', e.breakfastFrom ? `${e.breakfastFrom} – ${e.breakfastTo ?? ''}` : null],
+        ['Checkout', e.checkoutTime],
+        ['Notes', e.notes],
+      ]),
+    ],
+    [
+      'Identity form (without Aadhaar)',
+      form
+        ? rows([
+            ['Date of birth', form.dateOfBirth],
+            ['Address', form.address],
+            ['Mobile', form.phone],
+            ...(form.extra ?? []).map((f) => [f.label, `${f.kind === 'choice' ? `pick: ${f.options.join(', ')}` : 'text'}${f.required ? ' · required' : ''}`]),
+          ])
+        : [],
+    ],
+  ].filter(([, items]) => items.length)
+
+  return (
+    <Panel className="space-y-4 p-4">
+      {sections.length === 0 && <p className="text-[13px] text-stone-500">Nothing set up yet.</p>}
+      {sections.map(([title, items]) => (
+        <div key={title}>
+          <p className="mb-1 text-[12px] font-semibold text-stone-400">{title}</p>
+          <Rows items={items} />
+        </div>
+      ))}
+    </Panel>
+  )
 }

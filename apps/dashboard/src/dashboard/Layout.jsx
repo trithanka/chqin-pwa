@@ -36,6 +36,7 @@ const NAV = [
     heading: 'Property & Concierge',
     items: [
       { to: '/app/code', label: 'Check-in QR Code', icon: QrCode },
+      { to: '/app/visitors', label: 'Identification', icon: ShieldCheck },
       { to: '/app/settings', label: 'Settings', icon: Settings },
     ],
   },

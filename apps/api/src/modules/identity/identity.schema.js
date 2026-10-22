@@ -128,6 +128,8 @@ export const identityVerifications = pgTable(
     // "S/O RAMASAMY KUMAR". Part of how a person is identified on an Indian
     // register, and meaningless to reconstruct later if dropped now.
     subjectCareOf: text('subject_care_of'),
+    // Answers to the venue's own questions (basic identity only): { question: answer }.
+    subjectExtra: jsonb('subject_extra'),
     // Agreeing to an identity check is something you must be able to prove
     // happened: which text, and when.
     consent: jsonb('consent'),

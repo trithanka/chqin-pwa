@@ -233,3 +233,44 @@ export function isValidAadhaar(value) {
   })
   return c === 0
 }
+
+/* ------------------------------------------------------------------ */
+/* The identity form, for venues without Aadhaar                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * What a venue asks people who don't verify with Aadhaar. The name is always
+ * asked. Date of birth, address and mobile are each required, optional or
+ * off, and the venue can add its own questions: free text or a pick-list.
+ * Kept in `venues.settings.identityForm`; answers to the extra questions are
+ * stored with the identity check as { "<question>": "<answer>" }.
+ */
+export const FIELD_MODES = ['required', 'optional', 'off']
+const fieldMode = z.enum(FIELD_MODES)
+
+export const identityExtraFieldSchema = z
+  .object({
+    key: z.string().regex(/^[a-z0-9_]{1,40}$/),
+    label: z.string().trim().min(1).max(80),
+    kind: z.enum(['text', 'choice']),
+    options: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
+    required: z.boolean().default(false),
+  })
+  .refine((f) => f.kind !== 'choice' || (f.options?.length ?? 0) >= 2, 'A pick-list needs at least two options.')
+
+export const identityFormSchema = z.object({
+  dateOfBirth: fieldMode.default('required'),
+  address: fieldMode.default('required'),
+  phone: fieldMode.default('optional'),
+  extra: z
+    .array(identityExtraFieldSchema)
+    .max(10)
+    .default([])
+    .refine((fs) => new Set(fs.map((f) => f.key)).size === fs.length, 'Two questions share a key.'),
+})
+
+/** The venue's form, with defaults filled in for anything it never set. */
+export const identityFormOf = (settings) => {
+  const parsed = identityFormSchema.safeParse(settings?.identityForm ?? {})
+  return parsed.success ? parsed.data : identityFormSchema.parse({})
+}

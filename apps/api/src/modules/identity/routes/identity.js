@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
+import { identityFormOf } from '@chqin/shared'
 import { db } from '../../../shared/db/client.js'
 import { identityVerifications } from '../../../shared/db/schema.js'
 import { ApiError } from '../../../shared/lib/errors.js'
@@ -101,26 +102,62 @@ identity.post('/aadhaar/verify', body(otpVerify), async (c) => {
   }
 })
 
+const today = () => new Date().toISOString().slice(0, 10)
+
+// Shapes only. Which fields must be there is the venue's choice, checked below.
 const basicRequest = z.object({
   sessionId: z.uuid(),
   name: z.string().trim().min(2, 'Enter your name').max(120),
   dateOfBirth: z.iso
     .date('Enter your date of birth')
-    .refine((d) => d >= '1900-01-01' && d <= new Date().toISOString().slice(0, 10), 'Enter your date of birth'),
-  address: z.string().trim().min(5, 'Enter your address').max(300),
-  // Optional: kept so the venue can reach them, never required to get in.
+    .refine((d) => d >= '1900-01-01' && d <= today(), 'Enter your date of birth')
+    .optional()
+    .or(z.literal('')),
+  address: z.string().trim().max(300).optional(),
   phone: z
     .string()
     .regex(/^[\d\s+()-]{10,16}$/, 'Enter a valid mobile number')
     .optional()
     .or(z.literal('')),
+  // The venue's own questions, by key.
+  extra: z.record(z.string(), z.string().trim().max(200)).default({}),
 })
 
-/** For a venue without Aadhaar: name, date of birth and address, as the guest gives them. */
+/** The answers this venue's form wants, in the shape they are stored. */
+function answersFor(form, input) {
+  const missing = (message) => {
+    throw new ApiError('invalid_input', message, 400)
+  }
+  const pick = (mode, value, message) => {
+    if (mode === 'off') return null
+    if (!value && mode === 'required') missing(message)
+    return value || null
+  }
+  const dateOfBirth = pick(form.dateOfBirth, input.dateOfBirth, 'Enter your date of birth')
+  const address = pick(form.address, input.address?.length >= 5 ? input.address : '', 'Enter your address')
+  const phone = pick(form.phone, input.phone?.trim(), 'Enter your mobile number')
+
+  // Stored by question, not key: the record reads the same after the venue
+  // renames or removes a question.
+  const extra = {}
+  for (const field of form.extra) {
+    const value = input.extra[field.key]?.trim()
+    if (!value) {
+      if (field.required) missing(`Answer “${field.label}”`)
+      continue
+    }
+    if (field.kind === 'choice' && !field.options.includes(value)) missing(`Pick one of the options for “${field.label}”`)
+    extra[field.label] = value
+  }
+  return { dateOfBirth, address, phone, extra: Object.keys(extra).length ? extra : null }
+}
+
+/** For a venue without Aadhaar: the name, and whatever else the venue's form asks. */
 identity.post('/basic', body(basicRequest), async (c) => {
-  const { sessionId, name, dateOfBirth, address, phone } = c.get('body')
-  const session = await requireOpen(sessionId)
-  const result = await recordBasicIdentity(session, { name, dateOfBirth, address, phone: phone?.trim() || null })
+  const input = c.get('body')
+  const session = await requireOpen(input.sessionId)
+  const answers = answersFor(identityFormOf(session.venueSettings), input)
+  const result = await recordBasicIdentity(session, { name: input.name, ...answers })
   await logEvent(c, {
     venueId: session.venueId,
     sessionId: session.id,

@@ -235,11 +235,12 @@ export default function TodayPage() {
             />
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[700px] border-collapse text-left">
+              <table className="w-full min-w-[820px] border-collapse text-left">
                 <thead>
                   <tr>
                     <Th>Guest</Th>
                     <Th>Room Assigned</Th>
+                    <Th>Stay</Th>
                     <Th>Booking Reference</Th>
                     <Th>Status</Th>
                     <Th className="text-right">Check-in Time</Th>
@@ -278,6 +279,9 @@ export default function TodayPage() {
                           onAssigned={refresh}
                         />
                       </Td>
+                      <Td className="py-3.5 text-[13px] font-medium text-slate-600 whitespace-nowrap">
+                        <StayDates arrival={booking.arrival} departure={booking.departure} />
+                      </Td>
                       <Td className="py-3.5 font-mono text-[13px] font-medium text-slate-600">
                         {booking.reference ?? '—'}
                       </Td>
@@ -301,6 +305,20 @@ export default function TodayPage() {
         </Async>
       </Panel>
     </div>
+  )
+}
+
+/** "22 Oct → 24 Oct · 2 nights", from the dates the guest asked for. */
+function StayDates({ arrival, departure }) {
+  if (!arrival) return '—'
+  const fmt = (d) => new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+  const nights = departure ? Math.round((new Date(departure) - new Date(arrival)) / 86_400_000) : null
+  return (
+    <span>
+      {fmt(arrival)}
+      {departure && <> → {fmt(departure)}</>}
+      {nights > 0 && <span className="ml-1 text-slate-400">· {nights} {nights === 1 ? 'night' : 'nights'}</span>}
+    </span>
   )
 }
 
@@ -617,6 +635,8 @@ function RoomPickerModal({
               tone="primary"
               size="sm"
               loading={saving}
+              // Every requested room, or none to clear: never part of a request.
+              disabled={selectedIds.length !== 0 && selectedIds.length !== wanted}
               onClick={() => onSave(selectedIds)}
               icon={Check}
             >

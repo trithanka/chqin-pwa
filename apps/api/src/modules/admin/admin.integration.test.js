@@ -136,11 +136,12 @@ test('ChqIn Admin: isolation, roles, audit, venues and gates', { skip }, async (
       assert.equal((await call('POST', path, { reason: 'x' }, { cookie: viewer.cookie })).status, 403)
       assert.equal((await call('POST', path, { reason: '' }, { cookie: support.cookie })).status, 400)
 
-      const before = await auditCount()
       const r = await call('POST', path, { reason: 'caller says the hosts list is empty' }, { cookie: support.cookie })
       assert.equal(r.status, 200)
       assert.equal((await r.json()).minutes, 30)
-      assert.equal(await auditCount(), before + 1)
+      // Other tests write audit rows concurrently, so count only this one.
+      const logged = await db.execute(sql`SELECT reason FROM admin_audit_log WHERE action = 'venue.view_as' AND target_id = ${venue.id}`)
+      assert.deepEqual(logged.rows.map((x) => x.reason), ['caller says the hosts list is empty'])
       const view = cookieOf(r)
       assert.match(view, /^chqin_staff=/)
       const opts = { cookie: view, origin: STAFF, admin: false }
@@ -207,7 +208,8 @@ test('ChqIn Admin: isolation, roles, audit, venues and gates', { skip }, async (
       assert.equal(detail.venue.kind, 'office')
       assert.equal(detail.staff.length, 1)
       assert.equal(detail.staff[0].role, 'owner')
-      assert.match(detail.staff[0].email, /•••/)
+      // Business login emails are shown in full.
+      assert.match(detail.staff[0].email, /^[^•]+@test\.dev$/)
       assert.equal(detail.gates.length, 1)
       assert.equal(detail.gates[0].flowKey, 'visitor.host_approval')
       assert.deepEqual(detail.rooms, [])

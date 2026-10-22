@@ -87,6 +87,7 @@ export async function getGuest(venueId, id) {
       verifiedAt: identityVerifications.verifiedAt,
       address: identityVerifications.subjectAddress,
       careOf: identityVerifications.subjectCareOf,
+      extra: identityVerifications.subjectExtra,
       documentLast4: identityVerifications.documentLast4,
     })
     .from(identityVerifications)
@@ -105,6 +106,8 @@ export async function getGuest(venueId, id) {
     // the guest never gave one.
     address: verification?.address ?? null,
     careOf: verification?.careOf ?? null,
+    // Answers to the venue's own questions, when it asked any: { question: answer }.
+    extra: verification?.extra ?? null,
     maskedAadhaar: verification?.documentLast4 ? `XXXX XXXX ${verification.documentLast4}` : null,
     stays,
   }

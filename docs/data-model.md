@@ -100,6 +100,10 @@ Used by any venue that hosts visitors or runs events, The Nest first. Named for 
 
 How a venue identifies people is decided in two places. ChqIn Admin gives or takes away Aadhaar per venue (`venues.settings.aadhaarAccess`, on unless set to `false`). Without it, everyone, hotel guests included, gives a name, date of birth and address (mobile optional), recorded as method `basic` and never claimed as verified, and no Aadhaar OTP can be requested. With it, a hotel always uses Aadhaar, and any other venue picks `basic` or `aadhaar` on its gates (`gates.config.identity`).
 
+The basic form is the venue's own (`venues.settings.identityForm`, set on the dashboard's Identification page): the name is always asked; date of birth, address and mobile are each required, optional or off; and up to ten extra questions (free text or a pick-list, each optionally required). Answers to the extra questions are stored on the check as `identity_verifications.subject_extra`, `{ "<question>": "<answer>" }` (migration 0019).
+
+A passkey made after a basic check proves the phone, not the person. At a venue that uses Aadhaar, someone who has never passed an Aadhaar check (anywhere) unlocks their passkey and then does Aadhaar once; after that the passkey is enough. Check-in refuses them (`aadhaar_required`) until they have.
+
 ### Hotel tables (`hotel_`)
 
 | Table | Purpose |

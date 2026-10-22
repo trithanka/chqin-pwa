@@ -12,6 +12,7 @@ import {
 } from '../../shared/db/schema.js'
 import { conflict, unauthorized } from '../../shared/lib/errors.js'
 import { advance } from '../entry/index.js'
+import { requireIdentityMet } from '../identity/index.js'
 import { loadFlow } from '../entry/index.js'
 import { touch } from '../entry/index.js'
 import { receptionAlert } from './hotelNotify.js'
@@ -58,6 +59,7 @@ export async function checkIn(session, idempotencyKey, stay) {
       .from(entrySessions)
       .where(eq(entrySessions.id, session.id))
       .for('update')
+    if (fresh) await requireIdentityMet(session.identityMethod, fresh.guestId)
     if (!fresh || !['in_progress', 'waiting'].includes(fresh.status) || fresh.expiresAt < new Date()) {
       throw conflict('session_used', 'This check-in session is closed.')
     }

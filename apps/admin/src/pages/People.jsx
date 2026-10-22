@@ -290,9 +290,41 @@ export function GuestDetail() {
                   rows={g.credentials}
                   empty="No passkeys."
                   columns={[
-                    { label: 'Device', render: (c) => c.deviceLabel ?? 'unnamed' },
-                    { label: 'Created', render: (c) => when(c.createdAt) },
-                    { label: 'Last used', render: (c) => when(c.lastUsedAt) },
+                    {
+                      label: 'Device',
+                      render: (c) => (
+                        <div>
+                          <p>{c.deviceLabel ?? 'unnamed'}</p>
+                          <p className="text-[11.5px] text-stone-500" title={c.lastUserAgent ?? c.enrolledUserAgent ?? ''}>
+                            {browserOf(c.lastUserAgent ?? c.enrolledUserAgent) ?? '—'}
+                            {c.backedUp ? ' · synced passkey' : c.backupEligible ? ' · can sync' : ' · this device only'}
+                          </p>
+                        </div>
+                      ),
+                    },
+                    {
+                      label: 'Created',
+                      render: (c) => (
+                        <div>
+                          <p>{when(c.createdAt)}</p>
+                          <p className="text-[11.5px] text-stone-500">
+                            <Mono>{c.enrolledIp ?? '—'}</Mono>
+                            {c.enrolledVenue && <> · {c.enrolledVenue}</>}
+                          </p>
+                        </div>
+                      ),
+                    },
+                    {
+                      label: 'Last used',
+                      render: (c) => (
+                        <div>
+                          <p>{when(c.lastUsedAt ?? c.lastEventAt)}</p>
+                          <p className="text-[11.5px] text-stone-500">
+                            <Mono>{c.lastIp ?? '—'}</Mono> · {c.uses ?? 0} sign-ins
+                          </p>
+                        </div>
+                      ),
+                    },
                     { label: 'State', render: (c) => <Status value={c.revokedAt ? 'revoked' : 'active'} /> },
                     ...(write
                       ? [{ label: '', render: (c) => !c.revokedAt && <Button size="sm" onClick={() => act({ title: 'Revoke passkey', danger: true, description: 'This device can no longer sign the guest in.', reason: 'required', onSubmit: (v) => api.post(`/credentials/${c.id}/revoke`, v) })}>Revoke</Button> }]
@@ -578,4 +610,12 @@ export function SessionDetail() {
       {dialog}
     </>
   )
+}
+
+/** "Chrome on Android" from a user agent: enough to tell two phones apart. */
+function browserOf(ua) {
+  if (!ua) return null
+  const os = /iPhone|iPad/.test(ua) ? 'iOS' : /Android/.test(ua) ? 'Android' : /Mac OS X/.test(ua) ? 'macOS' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : null
+  const browser = /EdgA?\//.test(ua) ? 'Edge' : /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /CriOS|Chrome\//.test(ua) ? 'Chrome' : /FxiOS|Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : null
+  return [browser, os].filter(Boolean).join(' on ') || null
 }

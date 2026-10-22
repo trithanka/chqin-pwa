@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '../../shared/db/client.js'
 import { credentials, entrySessions, guests } from '../../shared/db/schema.js'
+import { aadhaarVerified } from './identity.js'
 
 /**
  * Which journey the guest is in. The guest never picks — this decides, from
@@ -26,7 +27,12 @@ export async function decideJourney(session, knownCredentialIds) {
       )
       .limit(1)
 
-    if (match) return { journey: 'returning', greetingName: match.displayName }
+    if (match) {
+      // Recognised, but this venue wants Aadhaar and they've only ever given a
+      // name and address: unlock the passkey, then do Aadhaar once.
+      const needsAadhaar = session.identityMethod === 'aadhaar' && !(await aadhaarVerified(match.id))
+      return { journey: 'returning', greetingName: match.displayName, ...(needsAadhaar ? { needsAadhaar: true } : {}) }
+    }
   }
 
   // No usable passkey here. The booking behind the QR is what makes recovery

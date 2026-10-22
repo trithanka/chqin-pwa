@@ -1,3 +1,4 @@
+import { identityFormOf } from '@chqin/shared'
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { config } from '../../config.js'
 import { db } from '../../shared/db/client.js'
@@ -106,6 +107,8 @@ export const toPayload = (s) => ({
   // Which flow the gate runs: the guest app picks its screens from this.
   flow: s.flowKey,
   identity: s.identityMethod,
+  // What the basic form asks at this venue; Aadhaar asks UIDAI instead.
+  ...(s.identityMethod === 'basic' ? { identityForm: identityFormOf(s.venueSettings) } : {}),
   venue: { name: s.venueName, kind: s.venueKind, location: s.venueLocation },
   booking: s.bookingId
     ? {

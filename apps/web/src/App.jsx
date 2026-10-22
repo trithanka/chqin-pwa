@@ -158,7 +158,15 @@ export default function App() {
   const hotelSteps = (session?.booking ? FLOWS[activeMode].filter((s) => s.key !== 'stayDetails') : FLOWS[activeMode]).map(
     (s) => (s.key === 'identity' && session?.identity === 'basic' ? { ...s, label: 'You', Screen: BasicIdentityScreen } : s),
   )
-  const currentFlowSteps = isVisit ? visitFlows(session.identity)[activeMode] : hotelSteps
+  const baseSteps = isVisit ? visitFlows(session.identity)[activeMode] : hotelSteps
+  // A returning guest who only ever gave name and address: the passkey proves
+  // the phone, then this venue's Aadhaar check runs once.
+  const currentFlowSteps =
+    session?.needsAadhaar && activeMode === 'returning'
+      ? baseSteps.flatMap((s) =>
+          s.key === 'deviceVerify' ? [s, { key: 'identity', label: 'Identity', Screen: IdentityVerificationScreen, completesCheckin: true }] : [s],
+        )
+      : baseSteps
 
   const step = currentFlowSteps[stepIndex]
 
@@ -267,7 +275,8 @@ export default function App() {
   /** Prove an existing passkey, then finish. */
   const runAuthentication = useCallback(async () => {
     await authenticate(session.sessionId)
-    if (isVisit) return
+    // The Aadhaar step comes next and finishes the check-in itself.
+    if (isVisit || session.needsAadhaar) return
     const result = await completeCheckin(session.sessionId, session.idempotencyKey, session.stay)
     setCheckin(result)
   }, [session, isVisit])
@@ -291,8 +300,22 @@ export default function App() {
     [session],
   )
 
+  // After a one-time Aadhaar check on a recognised phone there is no passkey
+  // step left to finish a hotel check-in, so this step does it.
+  const nextAfterStep =
+    step?.completesCheckin && !isVisit
+      ? async () => {
+          try {
+            setCheckin(await completeCheckin(session.sessionId, session.idempotencyKey, session.stay))
+            next()
+          } catch (err) {
+            showToast(err.message)
+          }
+        }
+      : next
+
   const screenProps = {
-    next,
+    next: nextAfterStep,
     patchSession: (patch) => setSession((s) => ({ ...s, ...patch })),
     attachBooking: linkBooking,
     showToast,

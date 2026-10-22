@@ -109,7 +109,8 @@ test('visitor flow: host approval, event check-in, isolation between venues', { 
       .where(eq(S.entrySessions.id, probe.scan.sessionId))
     await db.update(S.venues).set({ settings: sql`settings || '{"aadhaarAccess": false}'::jsonb` }).where(eq(S.venues.id, nestId))
     const settings = await json(await call('GET', '/staff/entry-settings', null, nest.cookie))
-    assert.deepEqual(settings, { identity: 'basic', aadhaarAccess: false })
+    assert.equal(settings.identity, 'basic')
+    assert.equal(settings.aadhaarAccess, false)
     assert.equal((await call('POST', '/staff/entry-settings', { identity: 'aadhaar' }, nest.cookie)).status, 403)
     probe = await who(nest.token)
     assert.equal(probe.scan.identity, 'basic')
@@ -120,6 +121,32 @@ test('visitor flow: host approval, event check-in, isolation between venues', { 
     assert.equal((await probe.basic(priya)).status, 200)
     await db.update(S.venues).set({ settings: sql`settings - 'aadhaarAccess'` }).where(eq(S.venues.id, nestId))
     await call('POST', '/staff/entry-settings', { identity: 'basic' }, nest.cookie)
+
+    // The venue designs its own form: no address, its own required pick-list.
+    const designed = await call(
+      'POST',
+      '/staff/entry-settings',
+      {
+        identityForm: {
+          dateOfBirth: 'optional',
+          address: 'off',
+          phone: 'optional',
+          extra: [{ key: 'vehicle', label: 'Coming by', kind: 'choice', options: ['Car', 'Bike', 'On foot'], required: true }],
+        },
+      },
+      nest.cookie,
+    )
+    assert.equal(designed.status, 200)
+    probe = await who(nest.token)
+    assert.equal(probe.scan.identityForm.address, 'off')
+    assert.equal((await probe.basic({ name: 'Asha Das' })).status, 400) // the pick-list is required
+    assert.equal((await probe.basic({ name: 'Asha Das', extra: { vehicle: 'Boat' } })).status, 400)
+    assert.equal((await probe.basic({ name: 'Asha Das', address: 'ignored, it is off', extra: { vehicle: 'Bike' } })).status, 200)
+    const [asha] = await db.select().from(S.identityVerifications).where(eq(S.identityVerifications.sessionId, probe.scan.sessionId))
+    assert.equal(asha.subjectAddress, null)
+    assert.equal(asha.subjectDob, null)
+    assert.deepEqual(asha.subjectExtra, { 'Coming by': 'Bike' })
+    await call('POST', '/staff/entry-settings', { identityForm: {} }, nest.cookie)
 
     // A meeting: asks for purpose, then host, then waits.
     const rahul = await visitor(nest.token, 'Rahul Sharma')

@@ -55,7 +55,9 @@ export function logEvent(c, fields) {
       event: fields.event,
       outcome: fields.outcome,
       detail: clean(fields.detail ?? {}),
-      ip: c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? null,
+      // nginx sets X-Real-IP from the connection itself; the first
+      // X-Forwarded-For entry is whatever the client chose to send.
+      ip: c.req.header('x-real-ip') ?? c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? null,
       userAgent: c.req.header('user-agent') ?? null,
     })
     .catch((err) => console.error('auth_event write failed:', err.message))

@@ -69,6 +69,11 @@ test('hotel flow, scan to check-in', { skip }, async () => {
     // Identity bound, then check in. A retry returns the same entry.
     const [guest] = await db.insert(S.guests).values({ displayName: 'Rahul Sharma', emailHmac: randomBytes(32) }).returning()
     await db.transaction((tx) => bindGuest(tx, sid, guest.id))
+    // A hotel uses Aadhaar: someone who only ever gave name and address must pass it once.
+    r = await post('/checkin', { sessionId: sid, idempotencyKey: key })
+    assert.equal(r.status, 403)
+    assert.equal((await r.json()).error, 'aadhaar_required')
+    await db.insert(S.identityVerifications).values({ guestId: guest.id, sessionId: sid, method: 'aadhaar_otp', provider: 'simulated', result: 'passed' })
     r = await post('/checkin', { sessionId: sid, idempotencyKey: key })
     const first = await r.json()
     assert.equal(r.status, 200)

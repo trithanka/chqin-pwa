@@ -45,7 +45,7 @@ export async function listStaff({ email, q, cursor, limit }) {
       cursor && sql`su.id < ${cursor}`,
     ])}
     ORDER BY su.id DESC LIMIT ${limit + 1}`)
-  return rows.map(({ email_enc: enc, ...r }) => ({ ...camel(r), email: maskEmail(decrypt(enc)) }))
+  return rows.map(({ email_enc: enc, ...r }) => ({ ...camel(r), email: decrypt(enc) }))
 }
 
 export async function getStaff(id) {
@@ -64,7 +64,7 @@ export async function getStaff(id) {
   return {
     id: user.id,
     name: user.displayName,
-    email: maskEmail(decrypt(user.emailEnc)),
+    email: decrypt(user.emailEnc),
     status: user.status,
     emailVerifiedAt: user.emailVerifiedAt,
     createdAt: user.createdAt,
@@ -162,8 +162,23 @@ export async function getGuest(id) {
   const q = async (query) => (await db.execute(query)).rows.map(camel)
   const [creds, checks, history] = await Promise.all([
     q(sql`
-      SELECT id, device_label, created_at, last_used_at, revoked_at, backed_up, sign_count
-      FROM credentials WHERE guest_id = ${id} ORDER BY created_at DESC`),
+      -- Where each passkey was made and last used, from the ceremony log:
+      -- IP, browser and venue. The IP is what reached our server (a mobile
+      -- carrier's, often), not a location.
+      SELECT c.id, c.device_label, c.created_at, c.last_used_at, c.revoked_at, c.backed_up, c.backup_eligible,
+        c.transports, c.aaguid, c.sign_count,
+        reg.ip::text AS enrolled_ip, reg.user_agent AS enrolled_user_agent, rv.name AS enrolled_venue,
+        last.ip::text AS last_ip, last.user_agent AS last_user_agent, last.occurred_at AS last_event_at,
+        (SELECT count(*)::int FROM auth_events a WHERE a.credential_id = c.credential_id AND a.outcome = 'ok') AS uses
+      FROM credentials c
+      LEFT JOIN LATERAL (
+        SELECT ip, user_agent, venue_id FROM auth_events a
+        WHERE a.credential_id = c.credential_id ORDER BY a.occurred_at ASC LIMIT 1) reg ON true
+      LEFT JOIN venues rv ON rv.id = reg.venue_id
+      LEFT JOIN LATERAL (
+        SELECT ip, user_agent, occurred_at FROM auth_events a
+        WHERE a.credential_id = c.credential_id ORDER BY a.occurred_at DESC LIMIT 1) last ON true
+      WHERE c.guest_id = ${id} ORDER BY c.created_at DESC`),
     q(sql`
       SELECT id, method, provider, result, document_type, document_last4, verified_at, created_at, consent
       FROM identity_verifications WHERE guest_id = ${id} ORDER BY created_at DESC LIMIT 50`),

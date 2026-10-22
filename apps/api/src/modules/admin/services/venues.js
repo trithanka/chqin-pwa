@@ -16,7 +16,7 @@ import { flowKeyFor } from '../../entry/index.js'
 import { register } from '../../venues/index.js'
 import { requestPasswordReset } from '../../venues/index.js'
 import { listWaiting } from '../../visitors/index.js'
-import { camel, like, maskEmail, maskPhone, whereAll } from './util.js'
+import { camel, like, maskPhone, whereAll } from './util.js'
 
 /**
  * Venues and gates across the platform. Nothing here assumes a venue is a
@@ -53,7 +53,7 @@ export async function listVenues({ q, kind, status, cursor, limit }) {
     ORDER BY v.id DESC
     LIMIT ${limit + 1}
   `)
-  return rows.map(({ owner_email_enc: enc, ...row }) => ({ ...camel(row), ownerEmail: maskEmail(decrypt(enc)) }))
+  return rows.map(({ owner_email_enc: enc, ...row }) => ({ ...camel(row), ownerEmail: decrypt(enc) }))
 }
 
 export async function getVenue(id) {
@@ -97,7 +97,8 @@ export async function getVenue(id) {
     venue,
     totals: totals[0],
     waiting: await listWaiting(id),
-    staff: staff.map(({ emailEnc, ...s }) => ({ ...s, email: maskEmail(decrypt(emailEnc)) })),
+    // Business login emails are shown in full: they are how support finds an account.
+    staff: staff.map(({ emailEnc, ...s }) => ({ ...s, email: decrypt(emailEnc) })),
     gates: gateRows,
     hosts: hosts.map((h) => ({ ...h, phone: maskPhone(h.phone) })),
     events,
