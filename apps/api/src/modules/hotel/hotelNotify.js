@@ -40,14 +40,15 @@ export const receptionAlert = (venueId, to, { guest, hotel, room, sessionId }) =
   }, sessionId)
 
 /** To the guest, who asked for their stay details on WhatsApp. */
-export const welcome = (venueId, to, { guest, hotel, essentials, sessionId }) =>
-  row(venueId, 'hotel.welcome', to, 'hotel_welcome', {
+export const welcome = (venueId, to, { guest, hotel, sessionId }) => {
+  const message = row(venueId, 'hotel.welcome', to, 'hotel_checkin_confirmed', {
     guest: p(guest, 'there'),
     hotel: p(hotel, 'the hotel'),
-    wifi: p(essentials?.wifiSsid, 'ask at reception'),
-    password: p(essentials?.wifiPassword, 'none'),
-    checkout: p(essentials?.checkoutTime, 'ask at reception'),
   }, sessionId)
+  // "Send room details": tapping it is what lets us send Wi-Fi and check-out.
+  message.payload.template.buttons = [`stay:${sessionId}`]
+  return message
+}
 
 /** To the guest, when the desk gives them a room. */
 export const roomReady = (venueId, to, { guest, hotel, room, sessionId }) =>

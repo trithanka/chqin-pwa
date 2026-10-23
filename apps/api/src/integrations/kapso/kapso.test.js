@@ -75,3 +75,17 @@ test('the sender posts an approved template with named parameters and one payloa
     globalThis.fetch = realFetch
   }
 })
+
+test('the check-in message carries no stay details, only a button that asks for them', async () => {
+  const { welcome, stayTapFrom } = await import('../../modules/hotel/index.js')
+  const msg = welcome('v', '98765 43210', { guest: 'Rahul', hotel: 'Hotel Aurora', sessionId: SID })
+  assert.equal(msg.payload.template.name, 'hotel_checkin_confirmed')
+  assert.deepEqual(Object.keys(msg.payload.template.params), ['guest', 'hotel'])
+  assert.deepEqual(msg.payload.template.buttons, [`stay:${SID}`])
+
+  // The tap comes back as a stay request, not a host decision.
+  const tap = { message: { type: 'button', from: '919876543210', button: { payload: `stay:${SID}` } } }
+  assert.deepEqual(stayTapFrom(tap), { sessionId: SID, from: '919876543210' })
+  assert.equal(replyFrom(tap), null)
+  assert.equal(stayTapFrom({ message: { kapso: { direction: 'outbound' }, button: { payload: `stay:${SID}` } } }), null)
+})

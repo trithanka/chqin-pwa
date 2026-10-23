@@ -2,6 +2,8 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 import { Hono } from 'hono'
 import { config } from '../../config.js'
 import { decideFromWhatsApp, replyFrom } from '../../modules/visitors/index.js'
+import { stayDetailsReply, stayTapFrom } from '../../modules/hotel/index.js'
+import { kapsoText } from './sender.js'
 
 export const webhooks = new Hono()
 
@@ -40,6 +42,19 @@ webhooks.post('/kapso', async (c) => {
   if (event === 'whatsapp.message.received') {
     // Buffered deliveries arrive as { batch: true, data: [...] }.
     for (const payload of body.batch ? body.data : [body]) {
+      // A hotel guest asking for their room details: answered at once, while
+      // their tap has the 24-hour window open.
+      const tap = stayTapFrom(payload)
+      if (tap) {
+        try {
+          const out = await stayDetailsReply(tap)
+          if (out.ignored) console.warn(`[kapso] stay tap ignored: ${out.ignored}`)
+          else await kapsoText(out.to, out.text)
+        } catch (err) {
+          console.warn(`[kapso] stay reply failed: ${err.message}`)
+        }
+        continue
+      }
       const reply = replyFrom(payload)
       if (!reply) continue
       try {

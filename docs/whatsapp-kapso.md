@@ -13,7 +13,7 @@ Four messages, each a template:
 | Message | Template | To | When |
 | --- | --- | --- | --- |
 | Check-in alert | `hotel_checkin_alert` | The hotel's reception number | A guest checks in, with their name and room (or "not assigned yet" for a walk-in) |
-| Stay details | `hotel_welcome` | The guest | The guest enters their number on the stay screen. Wi-Fi and check-out time |
+| Stay details | `hotel_checkin_confirmed` | The guest | The guest enters their number on the stay screen. The template only confirms the check-in, with a **Send room details** button. Tapping it opens WhatsApp's 24-hour window, and Wi-Fi, breakfast, check-out and notes come back as a plain message. Meta rejected every template that carried those details as marketing. |
 | Room ready | `hotel_room_ready` | The guest | The desk assigns a room, only for a guest who asked for stay details |
 | Service request | `service_request` | The team that handles that service | A guest taps Food, Laundry and so on in the app and sends it, with an optional note |
 
@@ -41,7 +41,7 @@ visitor picks a host
 
 - A message is written to the `outbox` table in the same transaction as the visit, then sent afterwards. A slow or failing provider never holds a visitor, and a visit that rolls back sends nothing. A failed send is retried with a growing delay and gives up after five tries.
 - Event check-ins send the organiser a plain notice (`event_checkin`). It has no buttons, because nothing waits on it.
-- Six templates are used: `visitor_arrival` (three quick-reply buttons), `event_checkin`, `hotel_checkin_alert`, `hotel_welcome`, `hotel_room_ready` and `service_request`. WhatsApp only allows a business to start a conversation with an approved template. `npm run kapso:templates` creates all six.
+- Six templates are used: `visitor_arrival` (three quick-reply buttons), `event_checkin`, `hotel_checkin_alert`, `hotel_checkin_confirmed`, `hotel_room_ready` and `service_request`. WhatsApp only allows a business to start a conversation with an approved template. `npm run kapso:templates` creates all six.
 
 ## Setup, in order
 

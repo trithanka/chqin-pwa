@@ -98,7 +98,9 @@ test('hotel flow, scan to check-in', { skip }, async () => {
       assert.equal((await stayCall('/stay/whatsapp', { phone: '+91 90000 11111' })).status, 200)
       const welcomes = await db.select().from(S.outbox).where(sql`kind = 'hotel.welcome' AND payload->>'sessionId' = ${sid}`)
       assert.equal(welcomes.length, 1) // asking twice sends once
-      assert.equal(welcomes[0].payload.template.params.wifi, 'Inn_Guest')
+      // Only a confirmation and a button: the Wi-Fi details go as a plain reply to the tap.
+      assert.equal(welcomes[0].payload.template.name, 'hotel_checkin_confirmed')
+      assert.deepEqual(welcomes[0].payload.template.buttons, [`stay:${sid}`])
 
       assert.equal((await stayCall('/stay/request', { service: 'laundry' })).status, 404) // not offered here
       assert.equal((await stayCall('/stay/request', { service: 'food', note: 'No onions\nplease' })).status, 200)

@@ -2,7 +2,8 @@ import { eq, sql } from 'drizzle-orm'
 import { transaction } from '../../shared/db/client.js'
 import { entrySessions, guests, outbox } from '../../shared/db/schema.js'
 import { ApiError, conflict, notFound } from '../../shared/lib/errors.js'
-import { encrypt } from '../../shared/lib/crypto.js'
+import { decrypt, encrypt } from '../../shared/lib/crypto.js'
+import { digits } from '../../shared/lib/phone.js'
 import { config } from '../../config.js'
 import { enqueue } from '../../shared/outbox/outbox.js'
 import { loadAny, touch } from '../entry/index.js'
@@ -62,7 +63,6 @@ export function optIn(sessionId, phone) {
       welcome(session.venueId, phone, {
         guest,
         hotel: session.venueName,
-        essentials: session.venueSettings?.essentials,
         sessionId,
       }),
     ])
@@ -95,4 +95,38 @@ export function request(sessionId, service, note) {
     ])
     return { ok: true }
   })
+}
+
+const STAY = /^stay:([0-9a-f-]{36})$/
+
+/** A guest's "Send room details" tap, from the webhook: { sessionId, from } or null. */
+export function stayTapFrom(payload) {
+  const m = payload?.message
+  if (!m || m.kapso?.direction === 'outbound') return null
+  const raw = m.button?.payload ?? m.interactive?.button_reply?.id ?? null
+  const match = typeof raw === 'string' ? raw.match(STAY) : null
+  return match ? { sessionId: match[1], from: m.from ?? payload.conversation?.phone_number ?? null } : null
+}
+
+/**
+ * The plain message that answers the tap: Wi-Fi, breakfast, check-out, notes. Only the guest's own WhatsApp got the
+ * button, and where WhatsApp shows the sender's number it must be the one the
+ * guest gave for this stay. Returns { to, text } or { ignored }.
+ */
+export async function stayDetailsReply({ sessionId, from }) {
+  const session = await loadAny(sessionId)
+  if (!session || session.flowKey !== 'hotel' || !session.state?.stayPhone) return { ignored: 'unknown_stay' }
+  const phone = decrypt(Buffer.from(session.state.stayPhone, 'base64'))
+  if (from && phone && digits(from).slice(-10) !== digits(phone).slice(-10)) return { ignored: 'other_number' }
+  const e = session.venueSettings?.essentials ?? {}
+  const lines = [
+    `Your stay at ${session.venueName}`,
+    e.wifiSsid && `Wi-Fi: ${e.wifiSsid}`,
+    e.wifiPassword && `Wi-Fi password: ${e.wifiPassword}`,
+    e.breakfastFrom && `Breakfast: ${e.breakfastFrom}${e.breakfastTo ? `–${e.breakfastTo}` : ''}`,
+    e.checkoutTime && `Check-out: ${e.checkoutTime}`,
+    e.notes,
+  ].filter(Boolean)
+  const text = lines.length > 1 ? lines.join('\n') : `${session.venueName} hasn't added room details yet. Please ask at reception.`
+  return { to: phone ?? from, text }
 }

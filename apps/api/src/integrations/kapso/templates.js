@@ -41,11 +41,13 @@ const EXAMPLE = {
   note: 'Two shirts, pressed',
 }
 
+// Meta rejects a body that starts or ends with a variable, or has too few
+// words per variable, so each one is padded with plain text on both sides.
 const templates = [
   {
     name: 'visitor_arrival',
     components: [
-      named('{{visitor}} is at reception for a {{purpose}} and asked to see {{host}}. Can they come in?', 'visitor', 'purpose', 'host'),
+      named('Hello, a visitor is waiting at reception. Name: {{visitor}}. Purpose: {{purpose}}. They asked to see {{host}}. Please tap a button below to let them in, keep them waiting, or decline the visit.', 'visitor', 'purpose', 'host'),
       {
         type: 'BUTTONS',
         buttons: ['Confirm', 'Keep waiting', 'Decline'].map((text) => ({ type: 'QUICK_REPLY', text })),
@@ -55,30 +57,35 @@ const templates = [
   {
     name: 'event_checkin',
     components: [
-      named('{{visitor}} ({{designation}}, {{company}}) checked in to {{event}}.', 'visitor', 'designation', 'company', 'event'),
+      named('A new attendee has just checked in at your event {{event}}. Name: {{visitor}}, working as {{designation}} at {{company}}. You can see every arrival on your ChqIn dashboard.', 'visitor', 'designation', 'company', 'event'),
     ],
   },
   // Hotels.
   {
     name: 'hotel_checkin_alert',
-    components: [named('{{guest}} checked in at {{hotel}}. Room: {{room}}.', 'guest', 'hotel', 'room')],
+    components: [named('A guest has just completed check-in at {{hotel}}. Guest name: {{guest}}. Room number: {{room}}. Open your ChqIn dashboard to see their details and stay dates.', 'guest', 'hotel', 'room')],
   },
+  // Only the confirmation: Meta rejected every version that carried Wi-Fi or
+  // check-out details as marketing. The button opens WhatsApp's 24-hour
+  // window and the details follow as a plain message (stayDetailsReply in
+  // modules/hotel/stayMessages.js).
   {
-    name: 'hotel_welcome',
+    name: 'hotel_checkin_confirmed',
     components: [
       named(
-        'Welcome to {{hotel}}, {{guest}}. Wi-Fi: {{wifi}}, password: {{password}}. Check-out: {{checkout}}.',
-        'guest', 'hotel', 'wifi', 'password', 'checkout',
+        'Hello {{guest}}, your check-in at {{hotel}} is confirmed. Tap the button below if you would like your room details sent in this chat.',
+        'guest', 'hotel',
       ),
+      { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Send room details' }] },
     ],
   },
   {
     name: 'hotel_room_ready',
-    components: [named('{{guest}}, your room at {{hotel}} is {{room}}.', 'guest', 'hotel', 'room')],
+    components: [named('Hello {{guest}}, good news from {{hotel}}. Your room is ready and the room number is {{room}}. Please collect your key at the front desk and enjoy your stay with us.', 'guest', 'hotel', 'room')],
   },
   {
     name: 'service_request',
-    components: [named('{{service}} request from {{guest}}, room {{room}}: {{note}}', 'service', 'guest', 'room', 'note')],
+    components: [named('A new guest request has arrived. Service: {{service}}. Guest name: {{guest}}, room {{room}}. Note from the guest: {{note}}. Please attend to it as soon as you can.', 'service', 'guest', 'room', 'note')],
   },
 ]
 
