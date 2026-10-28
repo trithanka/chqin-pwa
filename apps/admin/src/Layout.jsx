@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   ListChecks,
   LogOut,
+  MessageCircle,
   ScrollText,
   Server,
   ShieldCheck,
@@ -35,6 +36,7 @@ export const NAV = [
     ['/entries', 'Entries', ListChecks],
     ['/sessions', 'Sessions', Activity],
     ['/outbox', 'Outbox', Bell],
+    ['/whatsapp', 'WhatsApp', MessageCircle],
     ['/reports', 'Reports', BarChart3],
   ]],
   ['Security', [

@@ -20,6 +20,7 @@ import {
   updateAdmin,
 } from '../services/logs.js'
 import { pageOf, pageParams } from '../services/util.js'
+import { whatsappStatus } from '../services/whatsapp.js'
 import { OWNER, WRITE } from './guard.js'
 
 /** Outbox, auth events, the admin audit log, and admin accounts. */
@@ -35,6 +36,7 @@ const reasoned = z.object({ reason: z.string().max(500) })
 
 logRoutes.get('/outbox', paged(listOutbox))
 logRoutes.get('/outbox-info', async (c) => c.json(await outboxInfo()))
+logRoutes.get('/whatsapp', async (c) => c.json(await whatsappStatus()))
 
 for (const [verb, run] of [
   ['retry', retryMessage],

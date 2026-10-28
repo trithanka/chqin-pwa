@@ -7,7 +7,7 @@ import Overview from './pages/Overview'
 import Venues, { VenueDetail } from './pages/Venues'
 import Gates from './pages/Gates'
 import Flows, { FlowDetail, PublishFlow, Simulator, StepLibrary } from './pages/Flows'
-import { Admins, AuditLog, AuthEvents, Outbox } from './pages/Logs'
+import { Admins, AuditLog, AuthEvents, Outbox, WhatsApp } from './pages/Logs'
 import { Operations, Reports } from './pages/Ops'
 import { EntryDetail, EntryList, GuestDetail, GuestList, SessionDetail, SessionList, StaffDetail, StaffList } from './pages/People'
 
@@ -51,6 +51,7 @@ export default function App() {
           <Route path="sessions" element={<SessionList />} />
           <Route path="sessions/:id" element={<SessionDetail />} />
           <Route path="outbox" element={<Outbox />} />
+          <Route path="whatsapp" element={<WhatsApp />} />
           <Route path="auth-events" element={<AuthEvents />} />
           <Route path="audit" element={<AuditLog />} />
           {isOwner(admin) && <Route path="admins" element={<Admins />} />}

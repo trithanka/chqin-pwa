@@ -3,7 +3,7 @@ import { Download, UserPlus } from 'lucide-react'
 import { api } from '../api'
 import { canWrite, isOwner, useSession } from '../session'
 import { useApi, usePaged } from '../useApi'
-import { Async, Button, Id, Input, Json, Mono, PageHeader, PagedTable, Panel, Pill, Select, Status, Table, useAction, when } from '../ui'
+import { Async, Button, Id, Input, Json, Mono, PageHeader, PagedTable, Panel, Pill, Rows, Select, Status, Table, useAction, when } from '../ui'
 import { useFilters } from './People'
 
 /* ------------------------------------------------------------------ */
@@ -306,5 +306,83 @@ function AdminSessions({ admin, onClose }) {
       />
       {dialog}
     </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* WhatsApp (Kapso)                                                    */
+/* ------------------------------------------------------------------ */
+
+const templateTone = (s) => ({ APPROVED: 'good', PENDING: 'warn', IN_APPEAL: 'warn' })[s] ?? 'bad'
+
+export function WhatsApp() {
+  const { data, error, loading, reload } = useApi(() => api.get('/whatsapp'))
+  const n = data?.number
+  return (
+    <>
+      <PageHeader
+        title="WhatsApp"
+        subtitle="The Kapso account the outbox sends through. Read live from Kapso; change it there."
+        actions={
+          <>
+            <Button onClick={reload}>Refresh</Button>
+            {data?.consoleUrl && (
+              <Button tone="primary" onClick={() => window.open(data.consoleUrl, '_blank', 'noopener')}>
+                Open Kapso
+              </Button>
+            )}
+          </>
+        }
+      />
+      <Async loading={loading} error={error} onRetry={reload}>
+        {data && (
+          <div className="grid gap-4">
+            <Panel className="p-4">
+              <Rows
+                items={[
+                  ['Connection', data.connected ? <Pill tone="good">connected</Pill> : <Pill tone="bad">not connected</Pill>],
+                  ['Sending', data.sender === 'kapso' ? <Pill tone="good">on</Pill> : <Pill tone="warn">{data.sender ?? 'off'}</Pill>],
+                  data.error && ['Problem', <span className="text-red-300">{data.error}</span>],
+                  ['Number', n && `${n.display} · ${n.name}`],
+                  ['Number status', n && <Pill tone={n.status === 'CONNECTED' ? 'good' : 'bad'}>{n.status ?? 'unknown'}</Pill>],
+                  ['Quality', n?.quality],
+                  ['Daily limit', n?.limit],
+                  ['Phone number ID', <Mono>{data.phoneNumberId ?? '—'}</Mono>],
+                  ['Business account', <Mono>{n?.businessAccountId ?? '—'}</Mono>],
+                  ['Webhook secret', data.webhookSecret ? 'set' : <Pill tone="bad">missing: replies are refused</Pill>],
+                ]}
+              />
+            </Panel>
+            {data.templates && (
+              <Panel className="p-4">
+                <p className="mb-2 text-[13px] font-semibold text-stone-200">Templates</p>
+                <Table
+                  columns={[
+                    { label: 'Name', render: (t) => <Mono>{t.name}</Mono> },
+                    { label: 'Category', render: (t) => t.category ?? '—' },
+                    { label: 'Status', render: (t) => <Pill tone={templateTone(t.status)}>{t.status}</Pill> },
+                  ]}
+                  rows={data.templates}
+                />
+              </Panel>
+            )}
+            {data.webhooks && (
+              <Panel className="p-4">
+                <p className="mb-2 text-[13px] font-semibold text-stone-200">Incoming replies (webhooks)</p>
+                <Table
+                  empty="No webhook: host button taps won't reach ChqIn."
+                  columns={[
+                    { label: 'URL', render: (h) => <Mono>{h.url}</Mono> },
+                    { label: 'Events', render: (h) => h.events?.join(', ') },
+                    { label: 'Active', render: (h) => <Pill tone={h.active ? 'good' : 'bad'}>{h.active ? 'yes' : 'no'}</Pill> },
+                  ]}
+                  rows={data.webhooks}
+                />
+              </Panel>
+            )}
+          </div>
+        )}
+      </Async>
+    </>
   )
 }
