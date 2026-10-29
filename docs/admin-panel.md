@@ -56,6 +56,12 @@ On a venue's page, **Turn Aadhaar off / on** (reason required, audited as `venue
 
 Reports → **Aadhaar usage by venue**: OTPs sent (each one a paid provider call, whether or not the guest finishes), verified, not completed, and simulated checks counted apart. Confirm with the provider whether wrong-code retries are billed too; the report counts OTP requests only.
 
+## WhatsApp
+
+Activity → **WhatsApp** reads the Kapso account live: whether the number is connected and sending is on (`OUTBOX_SENDER=kapso`), the sending number's status, quality and daily limit, each template the product sends with Meta's approval status (`MISSING` if it was never created), and the webhook that delivers replies. It changes nothing; **Open Kapso** goes to the Kapso console for that. The Kapso key stays on the API (`GET /admin/whatsapp`).
+
+Phone numbers typed in the admin's venue forms (reception, per-service contacts, hosts) are Indian mobiles: a fixed +91 and exactly 10 digits, saved as `+91 XXXXXXXXXX` like the business dashboard saves them.
+
 ## Roles
 
 | | read_only | support | owner |

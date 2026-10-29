@@ -242,15 +242,22 @@ export function Tabs({ tabs, value, onChange }) {
  * `onSubmit(values)` may return { show } to keep the dialog open with a result
  * (an invite link, a new token) instead of closing.
  */
+/** An Indian mobile as its 10 digits, whether it was stored as "+91 98765 43210" or bare. */
+const tenDigits = (value) => {
+  const d = String(value ?? '').replace(/\D/g, '')
+  return (d.length > 10 && d.startsWith('91') ? d.slice(2) : d).slice(0, 10)
+}
+
 export function ActionDialog({ action, onClose, onDone }) {
   const { title, description, danger, fields = [], reason, confirmPhrase, submitLabel = 'Confirm', onSubmit } = action
   const [values, setValues] = useState(() =>
     Object.fromEntries(
       fields
         .filter((f) => f.type !== 'heading')
-        .map((f) => [f.name, f.defaultValue ?? (f.type === 'checkbox' ? false : f.type === 'multi' ? [] : '')]),
+        .map((f) => [f.name, f.type === 'phone' ? tenDigits(f.defaultValue) : f.defaultValue ?? (f.type === 'checkbox' ? false : f.type === 'multi' ? [] : '')]),
     ),
   )
+  const phones = fields.filter((f) => f.type === 'phone').map((f) => f.name)
   const [why, setWhy] = useState('')
   const [typed, setTyped] = useState('')
   const [busy, setBusy] = useState(false)
@@ -260,7 +267,8 @@ export function ActionDialog({ action, onClose, onDone }) {
   const ready =
     (!reason || reason === 'optional' || why.trim().length >= 5) &&
     (!confirmPhrase || typed === confirmPhrase) &&
-    fields.every((f) => !f.required || String(values[f.name] ?? '').trim())
+    fields.every((f) => !f.required || String(values[f.name] ?? '').trim()) &&
+    phones.every((n) => [0, 10].includes(values[n].length))
 
   const submit = async (e) => {
     e.preventDefault()
@@ -268,7 +276,9 @@ export function ActionDialog({ action, onClose, onDone }) {
     setBusy(true)
     setProblem(null)
     try {
-      const out = await onSubmit({ ...values, ...(reason ? { reason: why.trim() || undefined } : {}), ...(confirmPhrase ? { confirm: typed } : {}) })
+      // A phone box holds the 10 digits; the API gets it the way the business dashboard saves it.
+      const sent = { ...values, ...Object.fromEntries(phones.map((n) => [n, values[n] ? `+91 ${values[n]}` : ''])) }
+      const out = await onSubmit({ ...sent, ...(reason ? { reason: why.trim() || undefined } : {}), ...(confirmPhrase ? { confirm: typed } : {}) })
       onDone?.(out)
       if (out?.show) setShown(out.show)
       else onClose()
@@ -340,6 +350,17 @@ export function ActionDialog({ action, onClose, onDone }) {
                         </option>
                       ))}
                     </Select>
+                  ) : f.type === 'phone' ? (
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[13px] text-stone-400">+91</span>
+                      <Input
+                        type="tel"
+                        inputMode="numeric"
+                        value={values[f.name]}
+                        placeholder={f.placeholder ?? '9876543210'}
+                        onChange={(e) => setValues({ ...values, [f.name]: tenDigits(e.target.value) })}
+                      />
+                    </div>
                   ) : f.type === 'textarea' ? (
                     <Textarea rows={f.rows ?? 6} value={values[f.name]} onChange={(e) => setValues({ ...values, [f.name]: e.target.value })} />
                   ) : (

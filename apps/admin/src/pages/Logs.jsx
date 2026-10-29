@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Download, UserPlus } from 'lucide-react'
 import { api } from '../api'
 import { canWrite, isOwner, useSession } from '../session'
@@ -42,6 +43,9 @@ export function Outbox() {
               ? 'Messages go to the WhatsApp provider; a failure retries with a growing delay, then fails after 5 attempts.'
               : 'Nothing sends. Messages wait here as pending. Set OUTBOX_SENDER on the API to choose a provider.'}
         </span>
+        <Link to="/whatsapp" className="text-accent hover:underline">
+          WhatsApp account and templates →
+        </Link>
       </Panel>
       <div className="mb-3 flex flex-wrap gap-2">
         <Select value={f.status} onChange={(e) => set('status', e.target.value)} className="max-w-[160px]">

@@ -68,6 +68,11 @@ These steps need your Kapso and Meta accounts, so they are done by hand.
    ```
    The API refuses to start with `OUTBOX_SENDER=kapso` and no key or number.
 7. **Give hosts a WhatsApp number** in the dashboard under People & teams. A host with no number is not messaged; the visit still shows on the Today screen.
+8. **Check it** in ChqIn Admin → WhatsApp: connected, sending on, every template approved, the webhook active.
+
+## Live setup (chqin.in)
+
+Done on 2026-10-26. Number +1 205-793-8353 ("ChqIn"), phone number id `1374814999053199`, WABA `992697119781269`. All six templates approved as UTILITY. The webhook points at `https://api2.chqin.in/webhooks/kapso`. The Oracle server runs with `OUTBOX_SENDER=kapso`. Three rejected drafts (`hotel_checkin_details`, `hotel_stay_details`, `hotel_stay_info`) are left in Kapso; nothing sends them.
 
 ## What to know
 

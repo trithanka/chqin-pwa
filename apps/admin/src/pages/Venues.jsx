@@ -179,12 +179,12 @@ export function VenueDetail() {
           ['pincode', 'PIN code'],
         ]),
         { type: 'heading', label: 'Notifications' },
-        { name: 'reception', label: 'Reception WhatsApp number', placeholder: '+91 98765 43210', defaultValue: st.reception ?? '' },
+        { name: 'reception', label: 'Reception WhatsApp number', type: 'phone', defaultValue: st.reception ?? '' },
         ...(hotel
           ? [
               { type: 'heading', label: 'Guest services' },
               { name: 'services', label: 'Services guests can request', type: 'multi', options: GUEST_SERVICES.map((x) => ({ value: x, label: x })), defaultValue: st.services ?? [] },
-              ...GUEST_SERVICES.map((x) => ({ name: `contacts.${x}`, label: `${x} requests go to`, placeholder: '+91 …', defaultValue: c[x] ?? '' })),
+              ...GUEST_SERVICES.map((x) => ({ name: `contacts.${x}`, label: `${x} requests go to`, type: 'phone', defaultValue: c[x] ?? '' })),
               { type: 'heading', label: 'Guest essentials' },
               ...text('essentials', e, [
                 ['wifiSsid', 'Wi-Fi name'],
@@ -297,7 +297,7 @@ export function VenueDetail() {
       description: 'A person or team visitors can ask to see. The WhatsApp number is where their arrival notice goes.',
       fields: [
         { name: 'name', label: 'Name', required: true, defaultValue: host?.name },
-        { name: 'phone', label: 'WhatsApp number', defaultValue: '', placeholder: host ? 'Leave blank to keep the current number' : '+91 98765 43210' },
+        { name: 'phone', label: 'WhatsApp number', type: 'phone', defaultValue: '', placeholder: host ? 'Blank keeps the current number' : undefined },
       ],
       reason: 'optional',
       onSubmit: ({ name, phone, reason }) =>
