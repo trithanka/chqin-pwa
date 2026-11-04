@@ -63,7 +63,8 @@ test('visitor flow: host approval, event check-in, isolation between venues', { 
         .returning()
       await db.transaction((tx) => bindGuest(tx, scan.sessionId, guest.id))
       const step = (values) => call('POST', '/visits/step', { sessionId: scan.sessionId, ...(values ? { values } : {}) })
-      return { sid: scan.sessionId, step }
+      const back = () => call('POST', '/visits/step', { sessionId: scan.sessionId, back: true })
+      return { sid: scan.sessionId, step, back }
     }
 
     // Identification is the venue's choice. By default a name and number is enough;
@@ -154,6 +155,14 @@ test('visitor flow: host approval, event check-in, isolation between venues', { 
     assert.equal(v.waitingFor, 'details')
     assert.deepEqual(v.step.fields.map((f) => f.key), ['purpose'])
     assert.equal((await rahul.step({ purpose: 'burglary' })).status, 400)
+    assert.equal(v.canGoBack, false)
+    assert.equal((await rahul.back()).status, 409) // nothing before the first question
+    // Picked event by mistake: back to purpose, then meeting.
+    v = await json(await rahul.step({ purpose: 'event' }))
+    assert.equal(v.canGoBack, true)
+    v = await json(await rahul.back())
+    assert.deepEqual(v.step.fields.map((f) => f.key), ['purpose'])
+    assert.equal(v.purpose, null)
     v = await json(await rahul.step({ purpose: 'meeting' }))
     assert.deepEqual(v.step.fields[0].options.map((o) => o.label), ['CEO Office', 'Operations Team', 'Reception'])
     assert.equal((await rahul.step({ host: stranger.id })).status, 400) // another venue's host
@@ -161,6 +170,7 @@ test('visitor flow: host approval, event check-in, isolation between venues', { 
     assert.equal(v.status, 'waiting')
     assert.equal(v.waitingFor, 'staff')
     assert.equal(v.host, 'CEO Office')
+    assert.equal((await rahul.back()).status, 409) // the host has been asked already
 
     // The host was told once, with a number to send to; polling does not tell them again.
     await rahul.step()

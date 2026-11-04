@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowRight, CircleCheck, Clock3, CircleX, RotateCcw } from 'lucide-react'
-import { PrimaryButton, Screen, ScreenTitle } from '../components/ui'
+import { ArrowRight, ChevronLeft, CircleCheck, Clock3, CircleX, RotateCcw } from 'lucide-react'
+import { IconButton, PrimaryButton, Screen, ScreenTitle } from '../components/ui'
 import { visitStep } from '../checkin'
 import { succeeded } from '../lib/haptics'
 
@@ -24,13 +24,13 @@ export default function VisitScreen({ session, onDone, direction }) {
   const busyRef = useRef(false)
 
   const send = useCallback(
-    async (answers) => {
+    async (answers, back = false) => {
       if (busyRef.current) return
       busyRef.current = true
       setBusy(true)
       setError(null)
       try {
-        setView(await visitStep(session.sessionId, answers))
+        setView(await visitStep(session.sessionId, answers, back))
         setValues({})
       } catch (err) {
         setError(err.message)
@@ -56,6 +56,18 @@ export default function VisitScreen({ session, onDone, direction }) {
     }, POLL_MS)
     return () => clearInterval(timer)
   }, [waitingOnStaff, session.sessionId])
+
+  // The phone's own back gesture goes one question back too, instead of
+  // leaving the page: an extra history entry stands in front while there is
+  // somewhere to go back to, and the on-screen button uses the same path.
+  const canGoBack = Boolean(view?.canGoBack)
+  useEffect(() => {
+    if (!canGoBack) return
+    window.history.pushState({ visitBack: true }, '')
+    const onPop = () => send(undefined, true)
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [canGoBack, send])
 
   const done = view?.status === 'done'
   useEffect(() => {
@@ -142,11 +154,19 @@ export default function VisitScreen({ session, onDone, direction }) {
     )
   }
 
+  // One question back, e.g. from "who to meet" to "purpose of visit".
+  const backButton = view.canGoBack && (
+    <div className="-mt-8 mb-4">
+      <IconButton icon={ChevronLeft} label="Back" onClick={() => !busy && window.history.back()} />
+    </div>
+  )
+
   // One multiple-choice question is a list of big buttons: tapping answers it.
   if (fields.length === 1 && fields[0].kind === 'choice') {
     const [field] = fields
     return (
       <Screen direction={direction} className="pt-14 pb-8 px-7">
+        {backButton}
         <ScreenTitle title={field.label} />
         <div className="grid gap-3">
           {field.options.map((o) => (
@@ -174,6 +194,7 @@ export default function VisitScreen({ session, onDone, direction }) {
   return (
     <Screen direction={direction} className="justify-between pt-14 pb-8 px-7">
       <div>
+        {backButton}
         <ScreenTitle title="A few details" />
         <div className="grid gap-4">
           {fields.map((f) => (

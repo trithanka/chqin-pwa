@@ -14,9 +14,11 @@ const stepRequest = z.object({
   sessionId: z.uuid(),
   // Only answers to the current step's own fields are ever read.
   values: z.record(z.string().max(40), z.string().max(200)).optional(),
+  // Forget the last answer and ask that question again.
+  back: z.literal(true).optional(),
 })
 
 visits.post('/step', body(stepRequest), async (c) => {
-  const { sessionId, values } = c.get('body')
-  return c.json(await submit(sessionId, values))
+  const { sessionId, values, back } = c.get('body')
+  return c.json(await submit(sessionId, values, back))
 })

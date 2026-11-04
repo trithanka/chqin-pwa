@@ -96,3 +96,26 @@ export async function advance({ flow, session, input = {}, deps = {}, registry =
 
   return { ...result(), status: 'done' }
 }
+
+/**
+ * One question back: forget the answers of the last form before the current
+ * one, and stand on it again. Only from a form, and never across a step that
+ * waits on a person or lets someone in, since those have already happened.
+ * Returns { cursor, state }, or null when there is nothing to go back to.
+ */
+export function stepBack({ flow, session }) {
+  const { cursor, state, status } = session
+  if (status !== 'in_progress' && status !== 'waiting') return null
+  if (flow.steps[cursor]?.type !== 'collect_details') return null
+  for (let i = cursor - 1; i >= 0; i -= 1) {
+    const step = flow.steps[i]
+    if (!applies(step, state)) continue
+    if (step.type !== 'collect_details') return null
+    const keys = step.fields.map((f) => f.key).filter((k) => state[k] !== undefined)
+    if (!keys.length) continue
+    const rest = { ...state }
+    for (const k of keys) delete rest[k]
+    return { cursor: i, state: rest }
+  }
+  return null
+}

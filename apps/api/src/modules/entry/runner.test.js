@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { advance } from './runner.js'
+import { advance, stepBack } from './runner.js'
 import { validateFlow } from './flows.js'
 import { knownStepTypes, next, reject, steps, wait } from './steps.js'
 
@@ -252,4 +252,33 @@ test('the visitor flow published by migration 0014 is valid', async () => {
   const sql = readFileSync(new URL('../../../drizzle/0014_visitor_flow.sql', import.meta.url), 'utf8')
   const json = sql.match(/'(\[\s*\{"type":"identify"[\s\S]*?\])'::jsonb/)[1]
   assert.doesNotThrow(() => validateFlow(JSON.parse(json)))
+})
+
+test('stepBack forgets the last form and never crosses a step that is not a form', async () => {
+  const flow = {
+    steps: [
+      { type: 'identify' },
+      { type: 'collect_details', fields: [{ key: 'purpose', kind: 'choice', options: ['meeting', 'event'] }] },
+      { type: 'collect_details', when: { purpose: 'meeting' }, fields: [{ key: 'host', kind: 'text' }] },
+      { type: 'staff_approves', when: { purpose: 'meeting' } },
+      { type: 'collect_details', when: { purpose: 'event' }, fields: [{ key: 'event', kind: 'text' }, { key: 'company', kind: 'text' }] },
+      { type: 'admit' },
+    ],
+  }
+  // On the host question: back to purpose, purpose forgotten.
+  assert.deepEqual(stepBack({ flow, session: fresh({ status: 'waiting', cursor: 2, state: { purpose: 'meeting', x: 1 } }) }), {
+    cursor: 1,
+    state: { x: 1 },
+  })
+  // On the event form: the skipped meeting steps are passed over.
+  assert.deepEqual(stepBack({ flow, session: fresh({ status: 'waiting', cursor: 4, state: { purpose: 'event' } }) }), {
+    cursor: 1,
+    state: {},
+  })
+  // On the first question: only identify behind it.
+  assert.equal(stepBack({ flow, session: fresh({ status: 'waiting', cursor: 1, state: {} }) }), null)
+  // Waiting on a person: the request has gone, no going back.
+  assert.equal(stepBack({ flow, session: fresh({ status: 'waiting', cursor: 3, state: { purpose: 'meeting', host: 'h' } }) }), null)
+  // Finished.
+  assert.equal(stepBack({ flow, session: fresh({ status: 'done', cursor: 6, state: { purpose: 'event' } }) }), null)
 })

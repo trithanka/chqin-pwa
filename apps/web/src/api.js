@@ -41,7 +41,8 @@ async function request(path, body) {
 export const api = {
   resolveSession: (token) => request('/sessions/resolve', { token }),
   attachBooking: (sessionId, lookup) => request('/sessions/booking', { sessionId, lookup }),
-  visitStep: (sessionId, values) => request('/visits/step', { sessionId, ...(values ? { values } : {}) }),
+  visitStep: (sessionId, values, back) =>
+    request('/visits/step', { sessionId, ...(values ? { values } : {}), ...(back ? { back: true } : {}) }),
   stayWhatsapp: (sessionId, phone) => request('/stay/whatsapp', { sessionId, phone }),
   stayRequest: (sessionId, service, note) =>
     request('/stay/request', { sessionId, service, ...(note ? { note } : {}) }),

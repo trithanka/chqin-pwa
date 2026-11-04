@@ -89,7 +89,7 @@ export async function authenticate(sessionId) {
 export const recordBasicIdentity = (sessionId, details) => api.basicIdentity(sessionId, details)
 
 /** A visitor flow: post answers (or nothing, to ask where we are) and get the next screen's data. */
-export const visitStep = (sessionId, values) => api.visitStep(sessionId, values)
+export const visitStep = (sessionId, values, back) => api.visitStep(sessionId, values, back)
 
 /** After check-in, where this server sends WhatsApp: stay details to the guest, requests to the team. */
 export const sendStayDetails = (sessionId, phone) => api.stayWhatsapp(sessionId, phone)

@@ -10,7 +10,7 @@ import {
   visitHosts,
 } from '../../shared/db/schema.js'
 import { conflict, notFound } from '../../shared/lib/errors.js'
-import { advance } from '../entry/index.js'
+import { advance, stepBack } from '../entry/index.js'
 import { loadAny, loadFlow } from '../entry/index.js'
 import { requireIdentityMet } from '../identity/index.js'
 import { messagesFor } from './notify.js'
@@ -189,6 +189,7 @@ async function viewOf(tx, flow, out, deps, row) {
     step: current && view ? { type: current.type, ...view } : current ? { type: current.type } : null,
     reason: out.status === 'rejected' ? (out.reason ?? out.trail.at(-1)?.reason ?? null) : null,
     purpose: out.state.purpose ?? null,
+    canGoBack: stepBack({ flow, session: out }) !== null,
     // The host asked for more time; the visitor is told to wait at reception.
     held: out.state.approval === 'holding',
     ...(await labelsFor(tx, out.state)),
@@ -199,11 +200,19 @@ async function viewOf(tx, flow, out, deps, row) {
  * The guest's side: post what you have, get back where you are. Posting nothing
  * is how a screen polls, and a poll that changes nothing writes nothing.
  */
-export async function submit(sessionId, values) {
+export async function submit(sessionId, values, back = false) {
   return transaction(async (tx) => {
-    const row = await lockSession(tx, sessionId)
+    let row = await lockSession(tx, sessionId)
     if (!row) throw notFound()
     if (row.guestId) await requireIdentityMet((await loadAny(sessionId))?.identityMethod, row.guestId)
+    if (back) {
+      // One question back: the earlier answer is forgotten and asked again.
+      const prev = stepBack({ flow: await loadFlow(row.flowId), session: row })
+      if (!prev) throw conflict('no_back', 'You can’t go back from here.')
+      await tx.update(entrySessions).set({ ...prev, ...touch() }).where(eq(entrySessions.id, row.id))
+      row = await lockSession(tx, sessionId)
+      values = undefined
+    }
     // A finished session is read back as it stands, not re-run.
     const { flow, out, deps } = await run(tx, row, values ? { values } : {})
     return viewOf(tx, flow, out, deps, row)
