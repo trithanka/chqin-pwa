@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowRight, ChevronLeft, CircleCheck, Clock3, CircleX, RotateCcw } from 'lucide-react'
+import { ArrowRight, ChevronLeft, CircleCheck, CircleX, RotateCcw } from 'lucide-react'
 import { IconButton, PrimaryButton, Screen, ScreenTitle } from '../components/ui'
 import { visitStep } from '../checkin'
 import { succeeded } from '../lib/haptics'
@@ -7,11 +7,9 @@ import { succeeded } from '../lib/haptics'
 /**
  * Every question and answer after identity, drawn from what the server says the
  * current step is. This screen knows nothing about meetings or events: it draws
- * a form for `collect_details`, a waiting screen when a person has to decide,
+ * a form for `collect_details`, "request sent" once a person has been asked,
  * and a result. A new flow made of the same steps needs no change here.
  */
-
-const POLL_MS = 4000
 
 const inputClass =
   'h-14 w-full rounded-[20px] border border-slate-200 bg-white px-4 text-[16px] font-medium text-slate-900 transition-colors placeholder:font-normal placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-4 focus:ring-blue-500/12'
@@ -49,13 +47,6 @@ export default function VisitScreen({ session, onDone, direction }) {
   }, [send])
 
   const waitingOnStaff = view?.status === 'waiting' && view.waitingFor === 'staff'
-  useEffect(() => {
-    if (!waitingOnStaff) return
-    const timer = setInterval(() => {
-      visitStep(session.sessionId).then(setView).catch(() => {})
-    }, POLL_MS)
-    return () => clearInterval(timer)
-  }, [waitingOnStaff, session.sessionId])
 
   // The phone's own back gesture goes one question back too, instead of
   // leaving the page: an extra history entry stands in front while there is
@@ -69,7 +60,7 @@ export default function VisitScreen({ session, onDone, direction }) {
     return () => window.removeEventListener('popstate', onPop)
   }, [canGoBack, send])
 
-  const done = view?.status === 'done'
+  const done = view?.status === 'done' || waitingOnStaff
   useEffect(() => {
     if (done) succeeded()
   }, [done])
@@ -128,19 +119,17 @@ export default function VisitScreen({ session, onDone, direction }) {
     )
   }
 
+  // Once the host has been asked there is nothing left for the visitor to do
+  // here: the request is the end of their part, whatever the host replies.
   if (waitingOnStaff) {
     return (
       <Result
         direction={direction}
-        icon={Clock3}
-        tone="text-blue-600 bg-blue-50"
-        title={view.held ? 'Please wait at reception' : 'Request sent'}
-        body={
-          view.held
-            ? `${view.host ?? 'Your host'} will be with you shortly.`
-            : `${view.host ?? 'Your host'} has been notified. This screen updates when they reply.`
-        }
-        footer={<span className="text-[12.5px] font-semibold text-slate-400">Waiting for a reply…</span>}
+        icon={CircleCheck}
+        tone="text-emerald-600 bg-emerald-50"
+        title="Request sent"
+        body={`${view.host ?? 'Your host'} has been told you’re here.`}
+        action={<PrimaryButton onClick={onDone} tone="success">Done</PrimaryButton>}
       />
     )
   }
