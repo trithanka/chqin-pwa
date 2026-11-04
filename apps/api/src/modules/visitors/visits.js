@@ -134,19 +134,34 @@ export const listEvents = (venueId) =>
     .where(eq(eventEvents.venueId, venueId))
     .orderBy(desc(eventEvents.createdAt))
 
+async function checkOrganizer(venueId, organizerId, exec) {
+  if (!organizerId) return
+  // An organiser from another venue would be a way to message its staff.
+  const [host] = await exec
+    .select({ id: visitHosts.id })
+    .from(visitHosts)
+    .where(and(eq(visitHosts.id, organizerId), eq(visitHosts.venueId, venueId)))
+  if (!host) throw notFound('That organiser was not found.')
+}
+
 export async function addEvent(venueId, { name, organizerId }, exec = db) {
-  if (organizerId) {
-    // An organiser from another venue would be a way to message its staff.
-    const [host] = await exec
-      .select({ id: visitHosts.id })
-      .from(visitHosts)
-      .where(and(eq(visitHosts.id, organizerId), eq(visitHosts.venueId, venueId)))
-    if (!host) throw notFound('That organiser was not found.')
-  }
+  await checkOrganizer(venueId, organizerId, exec)
   const [row] = await exec
     .insert(eventEvents)
     .values({ venueId, name, organizerId: organizerId ?? null })
     .returning()
+  return row
+}
+
+/** Rename an event or change its organiser (null clears it). */
+export async function updateEvent(venueId, id, patch, exec = db) {
+  await checkOrganizer(venueId, patch.organizerId, exec)
+  const [row] = await exec
+    .update(eventEvents)
+    .set(patch)
+    .where(and(eq(eventEvents.id, id), eq(eventEvents.venueId, venueId)))
+    .returning()
+  if (!row) throw notFound('That event was not found.')
   return row
 }
 

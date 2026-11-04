@@ -14,6 +14,7 @@ import {
   listHosts,
   listWaiting,
   setEventActive,
+  updateEvent,
   updateHost,
 } from '../visits.js'
 
@@ -36,6 +37,11 @@ const hostPatch = z.object({
 
 const eventRequest = z.object({
   name: z.string().min(1).max(160),
+  organizerId: z.uuid().nullable().optional(),
+})
+
+const eventPatch = z.object({
+  name: z.string().min(1).max(160).optional(),
   organizerId: z.uuid().nullable().optional(),
 })
 
@@ -63,6 +69,10 @@ visitorStaff.get('/events', async (c) => c.json({ events: await listEvents(venue
 
 visitorStaff.post('/events', body(eventRequest), async (c) =>
   c.json(await addEvent(venueOf(c), c.get('body'))),
+)
+
+visitorStaff.post('/events/:id', body(eventPatch), async (c) =>
+  c.json(await updateEvent(venueOf(c), c.req.param('id'), c.get('body'))),
 )
 
 visitorStaff.post('/events/:id/active', body(z.object({ active: z.boolean() })), async (c) =>

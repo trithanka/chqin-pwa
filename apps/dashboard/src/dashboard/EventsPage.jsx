@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CalendarPlus, CalendarDays } from 'lucide-react'
+import { CalendarPlus, CalendarDays, Pencil } from 'lucide-react'
 import { Button, EmptyState, Field, Input, PageHeader, Panel, Select, StatusPill } from '../components/ui'
 import { api } from '../api'
 import Async from '../components/Async'
@@ -73,18 +73,7 @@ export default function EventsPage() {
         {events.length ? (
           <div className="grid gap-3">
             {events.map((ev) => (
-              <Panel key={ev.id} className="flex items-center justify-between gap-4 p-4">
-                <div className="min-w-0">
-                  <p className="truncate text-[15px] font-bold text-slate-900">{ev.name}</p>
-                  <p className="mt-0.5 text-[13px] text-slate-500">{ev.organizer ?? 'No organiser'}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <StatusPill tone={ev.active ? 'good' : 'muted'}>{ev.active ? 'Active' : 'Paused'}</StatusPill>
-                  <Button tone="secondary" size="sm" onClick={() => toggle(ev)}>
-                    {ev.active ? 'Pause' : 'Activate'}
-                  </Button>
-                </div>
-              </Panel>
+              <EventRow key={ev.id} event={ev} hosts={hosts} onToggle={() => toggle(ev)} onSaved={reload} />
             ))}
           </div>
         ) : (
@@ -92,5 +81,88 @@ export default function EventsPage() {
         )}
       </Async>
     </div>
+  )
+}
+
+function EventRow({ event, hosts, onToggle, onSaved }) {
+  const [editing, setEditing] = useState(false)
+  const [name, setName] = useState(event.name)
+  const [organizerId, setOrganizerId] = useState(event.organizerId ?? '')
+  const [busy, setBusy] = useState(false)
+  const [problem, setProblem] = useState(null)
+
+  const open = () => {
+    setName(event.name)
+    setOrganizerId(event.organizerId ?? '')
+    setProblem(null)
+    setEditing(true)
+  }
+
+  const save = async (e) => {
+    e.preventDefault()
+    if (!name.trim() || busy) return
+    setBusy(true)
+    setProblem(null)
+    try {
+      await api.post(`/staff/events/${event.id}`, { name: name.trim(), organizerId: organizerId || null })
+      setEditing(false)
+      onSaved()
+    } catch (err) {
+      setProblem(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // A paused organiser stays selectable here so editing the name doesn't drop them.
+  const choices = event.organizerId && !hosts.some((h) => h.id === event.organizerId)
+    ? [...hosts, { id: event.organizerId, name: event.organizer ?? 'Current organiser' }]
+    : hosts
+
+  if (editing) {
+    return (
+      <Panel className="p-4">
+        <form onSubmit={save} className="grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+          <Field label="Event name">
+            <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={160} autoFocus />
+          </Field>
+          <Field label="Organiser (told on each check-in)">
+            <Select value={organizerId} onChange={(e) => setOrganizerId(e.target.value)}>
+              <option value="">No organiser</option>
+              {choices.map((h) => (
+                <option key={h.id} value={h.id}>{h.name}</option>
+              ))}
+            </Select>
+          </Field>
+          <div className="flex gap-2">
+            <Button tone="ghost" onClick={() => setEditing(false)} disabled={busy}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={busy} disabled={!name.trim()}>
+              Save
+            </Button>
+          </div>
+        </form>
+        {problem && <p className="mt-3 text-[13px] font-medium text-red-600">{problem}</p>}
+      </Panel>
+    )
+  }
+
+  return (
+    <Panel className="flex items-center justify-between gap-4 p-4">
+      <div className="min-w-0">
+        <p className="truncate text-[15px] font-bold text-slate-900">{event.name}</p>
+        <p className="mt-0.5 text-[13px] text-slate-500">{event.organizer ?? 'No organiser'}</p>
+      </div>
+      <div className="flex items-center gap-3">
+        <StatusPill tone={event.active ? 'good' : 'muted'}>{event.active ? 'Active' : 'Paused'}</StatusPill>
+        <Button tone="secondary" size="sm" icon={Pencil} onClick={open}>
+          Edit
+        </Button>
+        <Button tone="secondary" size="sm" onClick={onToggle}>
+          {event.active ? 'Pause' : 'Activate'}
+        </Button>
+      </div>
+    </Panel>
   )
 }
