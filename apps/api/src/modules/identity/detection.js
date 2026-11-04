@@ -1,7 +1,7 @@
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '../../shared/db/client.js'
 import { credentials, entrySessions, guests } from '../../shared/db/schema.js'
-import { aadhaarVerified } from './identity.js'
+import { aadhaarVerified, missingDetails } from './identity.js'
 
 /**
  * Which journey the guest is in. The guest never picks — this decides, from
@@ -31,7 +31,15 @@ export async function decideJourney(session, knownCredentialIds) {
       // Recognised, but this venue wants Aadhaar and they've only ever given a
       // name and address: unlock the passkey, then do Aadhaar once.
       const needsAadhaar = session.identityMethod === 'aadhaar' && !(await aadhaarVerified(match.id))
-      return { journey: 'returning', greetingName: match.displayName, ...(needsAadhaar ? { needsAadhaar: true } : {}) }
+      // Or a basic venue made a question required after they enrolled: unlock
+      // the passkey, then answer just those.
+      const needsDetails = session.identityMethod === 'basic' ? await missingDetails(match.id, session.venueSettings) : []
+      return {
+        journey: 'returning',
+        greetingName: match.displayName,
+        ...(needsAadhaar ? { needsAadhaar: true } : {}),
+        ...(needsDetails.length ? { needsDetails } : {}),
+      }
     }
   }
 

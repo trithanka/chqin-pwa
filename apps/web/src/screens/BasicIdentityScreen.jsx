@@ -23,9 +23,20 @@ function Label({ text, optional }) {
  * Same place in the journey as the Aadhaar check, and it leads to the same
  * passkey step, so a returning guest is still recognised.
  */
-export default function BasicIdentityScreen({ session, patchSession, next, direction }) {
-  const form = session.identityForm ?? DEFAULT_FORM
-  const [name, setName] = useState('')
+export default function BasicIdentityScreen({ session, patchSession, next, direction, activeMode }) {
+  // A returning guest is asked only what the venue added since they enrolled,
+  // every one of them required; their name is already known.
+  const only = activeMode === 'returning' && session.needsDetails?.length ? session.needsDetails : null
+  const full = session.identityForm ?? DEFAULT_FORM
+  const form = only
+    ? {
+        dateOfBirth: only.includes('dateOfBirth') ? 'required' : 'off',
+        address: only.includes('address') ? 'required' : 'off',
+        phone: only.includes('phone') ? 'required' : 'off',
+        extra: full.extra.filter((f) => only.includes(f.key)).map((f) => ({ ...f, required: true })),
+      }
+    : full
+  const [name, setName] = useState(only ? (session.greetingName ?? 'Guest') : '')
   const [dateOfBirth, setDateOfBirth] = useState('')
   const [address, setAddress] = useState('')
   const [phone, setPhone] = useState('')
@@ -71,11 +82,11 @@ export default function BasicIdentityScreen({ session, patchSession, next, direc
     <Screen direction={direction} className="justify-between pt-7 pb-8 px-7">
       <form onSubmit={submit}>
         <ScreenTitle
-          title={isHotel ? 'Who’s checking in?' : 'Who’s visiting?'}
-          subtitle="A few details for the venue. Set up once on this phone."
+          title={only ? 'One more thing' : isHotel ? 'Who’s checking in?' : 'Who’s visiting?'}
+          subtitle={only ? 'The venue now asks for this. You’ll only be asked once.' : 'A few details for the venue. Set up once on this phone.'}
         />
         <div className="grid gap-4">
-          <label className="grid gap-1.5">
+          {!only && <label className="grid gap-1.5">
             <Label text="Full name" />
             <input
               value={name}
@@ -85,7 +96,7 @@ export default function BasicIdentityScreen({ session, patchSession, next, direc
               maxLength={120}
               className={inputClass}
             />
-          </label>
+          </label>}
           {asks('dateOfBirth') && (
             <label className="grid gap-1.5">
               <Label text="Date of birth" optional={optional('dateOfBirth')} />

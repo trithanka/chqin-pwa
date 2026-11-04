@@ -1,5 +1,5 @@
 import { and, desc, eq, isNull } from 'drizzle-orm'
-import { isValidAadhaar } from '@chqin/shared'
+import { identityFormOf, isValidAadhaar } from '@chqin/shared'
 import { db, transaction } from '../../shared/db/client.js'
 import { entitlements, guests, identityVerifications } from '../../shared/db/schema.js'
 import { encrypt, lookupHash } from '../../shared/lib/crypto.js'
@@ -366,7 +366,14 @@ export async function recordBasicIdentity(session, { name, dateOfBirth, address,
     })
     .returning({ id: identityVerifications.id })
 
-  await ensureSessionGuest(session, { name, dateOfBirth, phone })
+  if (session.guestId) {
+    // A returning guest answering what the venue added since: kept on them,
+    // where the next venue's check (and the desk) will look.
+    const known = { ...(dateOfBirth ? { dateOfBirth } : {}), ...(phone ? { phoneEnc: encrypt(phone) } : {}) }
+    if (Object.keys(known).length) await db.update(guests).set(known).where(eq(guests.id, session.guestId))
+  } else {
+    await ensureSessionGuest(session, { name, dateOfBirth, phone })
+  }
   return { verificationId: row.id, subject: { name, simulated: false } }
 }
 
@@ -391,9 +398,46 @@ export async function aadhaarVerified(guestId) {
   return Boolean(row)
 }
 
-/** Refuses to admit someone an Aadhaar venue hasn't seen pass Aadhaar yet. */
-export async function requireIdentityMet(identityMethod, guestId) {
-  if (identityMethod === 'aadhaar' && guestId && !(await aadhaarVerified(guestId))) {
+/**
+ * The required questions on a venue's form this guest has never answered:
+ * 'dateOfBirth', 'address', 'phone', or an extra question's key. A venue can
+ * make a question required after someone enrolled, and a passkey alone would
+ * otherwise carry them past it for good. Date of birth, address and phone are
+ * the person's, so an answer given anywhere counts; extra questions are matched
+ * by their label, which is how answers are stored.
+ */
+export async function missingDetails(guestId, venueSettings) {
+  if (!guestId) return []
+  const form = identityFormOf(venueSettings)
+  const [guest] = await db
+    .select({ dob: guests.dateOfBirth, phone: guests.phoneEnc })
+    .from(guests)
+    .where(eq(guests.id, guestId))
+  const rows = await db
+    .select({ dob: identityVerifications.subjectDob, address: identityVerifications.subjectAddress, extra: identityVerifications.subjectExtra })
+    .from(identityVerifications)
+    .where(and(eq(identityVerifications.guestId, guestId), eq(identityVerifications.result, 'passed')))
+  const has = {
+    dateOfBirth: Boolean(guest?.dob) || rows.some((r) => r.dob),
+    address: rows.some((r) => r.address),
+    phone: Boolean(guest?.phone),
+  }
+  const missing = ['dateOfBirth', 'address', 'phone'].filter((k) => form[k] === 'required' && !has[k])
+  for (const f of form.extra) if (f.required && !rows.some((r) => r.extra?.[f.label])) missing.push(f.key)
+  return missing
+}
+
+/**
+ * Refuses to admit someone this venue hasn't fully identified: an Aadhaar
+ * venue needs one passed Aadhaar check, a basic one an answer to each of its
+ * required questions. `session` is a loaded session (identityMethod, venueSettings).
+ */
+export async function requireIdentityMet(session, guestId) {
+  if (!session || !guestId) return
+  if (session.identityMethod === 'aadhaar' && !(await aadhaarVerified(guestId))) {
     throw new ApiError('aadhaar_required', 'This venue needs a one-time Aadhaar check.', 403)
+  }
+  if (session.identityMethod === 'basic' && (await missingDetails(guestId, session.venueSettings)).length) {
+    throw new ApiError('details_required', 'This venue needs a few more details from you.', 403)
   }
 }

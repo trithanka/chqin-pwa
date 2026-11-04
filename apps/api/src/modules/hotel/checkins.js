@@ -59,7 +59,7 @@ export async function checkIn(session, idempotencyKey, stay) {
       .from(entrySessions)
       .where(eq(entrySessions.id, session.id))
       .for('update')
-    if (fresh) await requireIdentityMet(session.identityMethod, fresh.guestId)
+    if (fresh) await requireIdentityMet(session, fresh.guestId)
     if (!fresh || !['in_progress', 'waiting'].includes(fresh.status) || fresh.expiresAt < new Date()) {
       throw conflict('session_used', 'This check-in session is closed.')
     }

@@ -161,12 +161,19 @@ export default function App() {
   const baseSteps = isVisit ? visitFlows(session.identity)[activeMode] : hotelSteps
   // A returning guest who only ever gave name and address: the passkey proves
   // the phone, then this venue's Aadhaar check runs once.
-  const currentFlowSteps =
-    session?.needsAadhaar && activeMode === 'returning'
-      ? baseSteps.flatMap((s) =>
-          s.key === 'deviceVerify' ? [s, { key: 'identity', label: 'Identity', Screen: IdentityVerificationScreen, completesCheckin: true }] : [s],
-        )
-      : baseSteps
+  // Or the venue's form now requires something they never gave: the passkey,
+  // then just those questions.
+  const topUp =
+    activeMode !== 'returning'
+      ? null
+      : session?.needsAadhaar
+        ? { key: 'identity', label: 'Identity', Screen: IdentityVerificationScreen, completesCheckin: true }
+        : session?.needsDetails?.length
+          ? { key: 'identity', label: 'You', Screen: BasicIdentityScreen, completesCheckin: true }
+          : null
+  const currentFlowSteps = topUp
+    ? baseSteps.flatMap((s) => (s.key === 'deviceVerify' ? [s, topUp] : [s]))
+    : baseSteps
 
   const step = currentFlowSteps[stepIndex]
 
@@ -275,8 +282,8 @@ export default function App() {
   /** Prove an existing passkey, then finish. */
   const runAuthentication = useCallback(async () => {
     await authenticate(session.sessionId)
-    // The Aadhaar step comes next and finishes the check-in itself.
-    if (isVisit || session.needsAadhaar) return
+    // The Aadhaar or details step comes next and finishes the check-in itself.
+    if (isVisit || session.needsAadhaar || session.needsDetails?.length) return
     const result = await completeCheckin(session.sessionId, session.idempotencyKey, session.stay)
     setCheckin(result)
   }, [session, isVisit])

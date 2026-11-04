@@ -59,8 +59,17 @@ test('visitor flow: host approval, event check-in, isolation between venues', { 
       assert.equal(scan.flow, 'visitor.host_approval')
       const [guest] = await db
         .insert(S.guests)
-        .values({ displayName: name, emailHmac: randomBytes(32) })
+        .values({ displayName: name, emailHmac: randomBytes(32), dateOfBirth: '1990-01-01' })
         .returning()
+      // Identified the way a basic venue's default form asks: name, birth date, address.
+      await db.insert(S.identityVerifications).values({
+        guestId: guest.id,
+        method: 'basic',
+        result: 'passed',
+        subjectName: name,
+        subjectDob: '1990-01-01',
+        subjectAddress: { street: '1 Test Road' },
+      })
       await db.transaction((tx) => bindGuest(tx, scan.sessionId, guest.id))
       const step = (values) => call('POST', '/visits/step', { sessionId: scan.sessionId, ...(values ? { values } : {}) })
       const back = () => call('POST', '/visits/step', { sessionId: scan.sessionId, back: true })
@@ -148,6 +157,30 @@ test('visitor flow: host approval, event check-in, isolation between venues', { 
     assert.equal(asha.subjectDob, null)
     assert.deepEqual(asha.subjectExtra, { 'Coming by': 'Bike' })
     await call('POST', '/staff/entry-settings', { identityForm: {} }, nest.cookie)
+
+    // Enrolled when the form didn't ask for a birth date; now it does. The
+    // passkey still recognises them, but they answer that one question first.
+    {
+      const [zoya] = await db.insert(S.guests).values({ displayName: 'Zoya Khan', emailHmac: randomBytes(32) }).returning()
+      await db.insert(S.identityVerifications).values({
+        guestId: zoya.id, method: 'basic', result: 'passed', subjectName: 'Zoya Khan', subjectAddress: { street: '2 Old Road' },
+      })
+      const credentialId = `cred-zoya-${randomBytes(4).toString('hex')}`
+      await db.insert(S.credentials).values({ guestId: zoya.id, credentialId, publicKey: Buffer.from('k'), alg: -7 })
+      const scan = await json(await call('POST', '/sessions/resolve', { token: nest.token }))
+      const seen = await json(await call('POST', '/detect', { sessionId: scan.sessionId, knownCredentialIds: [credentialId] }))
+      assert.equal(seen.journey, 'returning')
+      assert.deepEqual(seen.needsDetails, ['dateOfBirth'])
+      await db.transaction((tx) => bindGuest(tx, scan.sessionId, zoya.id)) // what a verified passkey does
+      const step = (values) => call('POST', '/visits/step', { sessionId: scan.sessionId, ...(values ? { values } : {}) })
+      assert.equal((await step()).status, 403)
+      // Only the missing answer: no address asked again.
+      assert.equal((await call('POST', '/identity/basic', { sessionId: scan.sessionId, name: 'Zoya Khan' })).status, 400)
+      assert.equal((await call('POST', '/identity/basic', { sessionId: scan.sessionId, name: 'Zoya Khan', dateOfBirth: '1992-05-04' })).status, 200)
+      assert.equal((await step()).status, 200)
+      const [after] = await db.select().from(S.guests).where(eq(S.guests.id, zoya.id))
+      assert.equal(after.dateOfBirth, '1992-05-04')
+    }
 
     // A meeting: asks for purpose, then host, then waits.
     const rahul = await visitor(nest.token, 'Rahul Sharma')

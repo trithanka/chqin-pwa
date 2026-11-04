@@ -204,7 +204,7 @@ export async function submit(sessionId, values, back = false) {
   return transaction(async (tx) => {
     let row = await lockSession(tx, sessionId)
     if (!row) throw notFound()
-    if (row.guestId) await requireIdentityMet((await loadAny(sessionId))?.identityMethod, row.guestId)
+    if (row.guestId) await requireIdentityMet(await loadAny(sessionId), row.guestId)
     if (back) {
       // One question back: the earlier answer is forgotten and asked again.
       const prev = stepBack({ flow: await loadFlow(row.flowId), session: row })

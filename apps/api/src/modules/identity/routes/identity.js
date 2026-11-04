@@ -9,6 +9,7 @@ import { body } from '../../../shared/lib/validate.js'
 import { logEvent } from '../audit.js'
 import { requireOpen } from '../../entry/index.js'
 import {
+  missingDetails,
   recordBasicIdentity,
   recordDocumentCapture,
   requestAadhaarOtp,
@@ -152,11 +153,29 @@ function answersFor(form, input) {
   return { dateOfBirth, address, phone, extra: Object.keys(extra).length ? extra : null }
 }
 
+/**
+ * The form a submission is checked against. A guest already known on this
+ * session (unlocked a passkey) is answering only what they have never given:
+ * those questions, all required, and nothing they gave before.
+ */
+async function formFor(session) {
+  const form = identityFormOf(session.venueSettings)
+  if (!session.guestId) return form
+  const missing = await missingDetails(session.guestId, session.venueSettings)
+  const mode = (k) => (missing.includes(k) ? 'required' : 'off')
+  return {
+    dateOfBirth: mode('dateOfBirth'),
+    address: mode('address'),
+    phone: mode('phone'),
+    extra: form.extra.filter((f) => missing.includes(f.key)),
+  }
+}
+
 /** For a venue without Aadhaar: the name, and whatever else the venue's form asks. */
 identity.post('/basic', body(basicRequest), async (c) => {
   const input = c.get('body')
   const session = await requireOpen(input.sessionId)
-  const answers = answersFor(identityFormOf(session.venueSettings), input)
+  const answers = answersFor(await formFor(session), input)
   const result = await recordBasicIdentity(session, { name: input.name, ...answers })
   await logEvent(c, {
     venueId: session.venueId,

@@ -35,6 +35,8 @@ export async function start(token) {
     greetingName: detection.greetingName,
     // Recognised, but this venue wants an Aadhaar check they have never done.
     needsAadhaar: Boolean(detection.needsAadhaar),
+    // Recognised, but the venue's form now requires questions they never answered.
+    needsDetails: detection.needsDetails ?? [],
     // One key per session: a retry after a dropped response returns the
     // original check-in instead of making a second one.
     idempotencyKey: uuid(),
