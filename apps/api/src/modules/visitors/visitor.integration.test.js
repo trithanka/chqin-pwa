@@ -280,6 +280,15 @@ test('visitor flow: host approval, event check-in, isolation between venues', { 
     assert.equal(told.length, 1)
     assert.match(told[0].payload.text, /Acme/)
 
+    // The event's attendee list, for this venue only.
+    const list = await json(await call('GET', `/staff/events/${event.id}/attendees`, null, nest.cookie))
+    assert.deepEqual(
+      list.attendees.map((a) => [a.name, a.company, a.designation]),
+      [['Arjun Bora', 'Acme', 'Founder']],
+    )
+    assert.equal((await call('GET', `/staff/events/${event.id}/attendees`, null, other.cookie)).status, 404)
+    assert.equal((await call('GET', '/staff/events/not-a-uuid/attendees', null, nest.cookie)).status, 404)
+
     // The desk's numbers.
     const day = await json(await call('GET', '/staff/visits/arrivals', null, nest.cookie))
     assert.deepEqual(day.counts, { arrivals: 3, waiting: 0, events: 1 })

@@ -153,6 +153,33 @@ export async function addEvent(venueId, { name, organizerId }, exec = db) {
   return row
 }
 
+/** Everyone who checked in to one of this venue's events, newest first. */
+export async function eventAttendees(venueId, eventId) {
+  if (!/^[0-9a-f-]{36}$/i.test(eventId)) throw notFound('That event was not found.')
+  const [event] = await db
+    .select({ id: eventEvents.id, name: eventEvents.name })
+    .from(eventEvents)
+    .where(and(eq(eventEvents.id, eventId), eq(eventEvents.venueId, venueId)))
+  if (!event) throw notFound('That event was not found.')
+  const { rows } = await db.execute(sql`
+    SELECT g.display_name AS name, ed.company, ed.designation, e.entered_at
+    FROM event_entry_details ed
+    JOIN entries e ON e.id = ed.entry_id AND e.venue_id = ${venueId}
+    LEFT JOIN guests g ON g.id = e.guest_id
+    WHERE ed.event_id = ${eventId}
+    ORDER BY e.entered_at DESC
+    LIMIT 1000`)
+  return {
+    event,
+    attendees: rows.map((r) => ({
+      name: r.name ?? 'Unknown',
+      company: r.company,
+      designation: r.designation,
+      at: new Date(r.entered_at).toISOString(),
+    })),
+  }
+}
+
 /** Rename an event or change its organiser (null clears it). */
 export async function updateEvent(venueId, id, patch, exec = db) {
   await checkOrganizer(venueId, patch.organizerId, exec)

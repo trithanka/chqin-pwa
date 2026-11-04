@@ -8,6 +8,7 @@ import {
   addEvent,
   addHost,
   arrivals,
+  eventAttendees,
   getEntrySettings,
   saveEntrySettings,
   listEvents,
@@ -69,6 +70,10 @@ visitorStaff.get('/events', async (c) => c.json({ events: await listEvents(venue
 
 visitorStaff.post('/events', body(eventRequest), async (c) =>
   c.json(await addEvent(venueOf(c), c.get('body'))),
+)
+
+visitorStaff.get('/events/:id/attendees', async (c) =>
+  c.json(await eventAttendees(venueOf(c), c.req.param('id'))),
 )
 
 visitorStaff.post('/events/:id', body(eventPatch), async (c) =>
